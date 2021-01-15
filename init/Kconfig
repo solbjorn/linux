@@ -1434,6 +1434,13 @@ config CC_OPTIMIZE_FOR_SIZE
 
 endchoice
 
+config INLINE_OPTIMIZATION
+	bool "Optimize compiler inlining"
+	help
+	  Inlining functions in the hot-path can help improve performance,
+	  while also increasing the final size of the kernel image. Setting
+	  this option informs the compiler to optimize inlining.
+
 config HAVE_LD_DEAD_CODE_DATA_ELIMINATION
 	bool
 	help
