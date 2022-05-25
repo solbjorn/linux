@@ -5592,6 +5592,9 @@ void scheduler_tick(bool user_tick)
 	unsigned long thermal_pressure;
 	u64 resched_latency;
 
+	if (sched_ipcc_enabled() && user_tick)
+		arch_update_ipcc(curr);
+
 	if (housekeeping_cpu(cpu, HK_TYPE_TICK))
 		arch_scale_freq_tick();
 
