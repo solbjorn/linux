@@ -4451,6 +4451,8 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #endif // CONFIG_SCHED_BORE
 #ifdef CONFIG_IPC_CLASSES
 	p->ipcc				= IPC_CLASS_UNCLASSIFIED;
+	p->ipcc_tmp			= IPC_CLASS_UNCLASSIFIED;
+	p->ipcc_cntr			= 0;
 #endif
 	INIT_LIST_HEAD(&p->se.group_node);
 	RB_CLEAR_NODE(&p->se.latency_node);
