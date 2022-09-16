@@ -825,6 +825,13 @@ extern u8 fineibt_caller_end[];
 
 #define fineibt_caller_jmp (fineibt_caller_size - 2)
 
+unsigned int bpf_jit_cfi_type_size(void);
+
+unsigned int bpf_jit_cfi_type_size(void)
+{
+	return fineibt_preamble_size;
+}
+
 static u32 decode_preamble_hash(void *addr)
 {
 	u8 *p = addr;
