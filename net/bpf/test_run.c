@@ -588,19 +588,21 @@ bpf_kfunc_call_memb_acquire(void)
 	return NULL;
 }
 
-noinline void bpf_kfunc_call_test_release(struct prog_test_ref_kfunc *p)
+noinline void bpf_kfunc_call_test_release(void *p)
 {
-	if (!p)
+	struct prog_test_ref_kfunc *ptr = (struct prog_test_ref_kfunc *)p;
+
+	if (!ptr)
 		return;
 
-	refcount_dec(&p->cnt);
+	refcount_dec(&ptr->cnt);
 }
 
-noinline void bpf_kfunc_call_memb_release(struct prog_test_member *p)
+noinline void bpf_kfunc_call_memb_release(void *p)
 {
 }
 
-noinline void bpf_kfunc_call_memb1_release(struct prog_test_member1 *p)
+noinline void bpf_kfunc_call_memb1_release(void *p)
 {
 	WARN_ON_ONCE(1);
 }
