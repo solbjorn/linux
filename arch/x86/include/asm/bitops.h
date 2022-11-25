@@ -333,18 +333,15 @@ static __always_inline int variable_ffs(int x)
  */
 #define ffs(x) (__builtin_constant_p(x) ? __builtin_ffs(x) : variable_ffs(x))
 
-/**
- * fls - find last set bit in word
- * @x: the word to search
- *
- * This is defined in a similar way as the libc and compiler builtin
- * ffs, but returns the position of the most significant set bit.
- *
- * fls(value) returns 0 if value is 0 or the position of the last
- * set bit if value is nonzero. The last (most significant) bit is
- * at position 32.
- */
-static __always_inline int fls(unsigned int x)
+static __always_inline int constant_fls(unsigned int x)
+{
+	if (!x)
+		return 0;
+
+	return BITS_PER_TYPE(x) - __builtin_clz(x);
+}
+
+static __always_inline int variable_fls(unsigned int x)
 {
 	int r;
 
@@ -375,18 +372,29 @@ static __always_inline int fls(unsigned int x)
 }
 
 /**
- * fls64 - find last set bit in a 64-bit word
+ * fls - find last set bit in word
  * @x: the word to search
  *
  * This is defined in a similar way as the libc and compiler builtin
- * ffsll, but returns the position of the most significant set bit.
+ * ffs, but returns the position of the most significant set bit.
  *
- * fls64(value) returns 0 if value is 0 or the position of the last
+ * fls(value) returns 0 if value is 0 or the position of the last
  * set bit if value is nonzero. The last (most significant) bit is
- * at position 64.
+ * at position 32.
  */
+#define fls(x) (__builtin_constant_p(x) ? constant_fls(x) : variable_fls(x))
+
 #ifdef CONFIG_X86_64
-static __always_inline int fls64(__u64 x)
+static __always_inline int constant_fls64(u64 x)
+{
+	if (!x)
+		return 0;
+
+	BUILD_BUG_ON(!__same_type(x, unsigned long long));
+	return BITS_PER_TYPE(x) - __builtin_clzll(x);
+}
+
+static __always_inline int variable_fls64(u64 x)
 {
 	int bitpos = -1;
 	/*
@@ -399,6 +407,20 @@ static __always_inline int fls64(__u64 x)
 	    : "rm" (x));
 	return bitpos + 1;
 }
+
+/**
+ * fls64 - find last set bit in a 64-bit word
+ * @x: the word to search
+ *
+ * This is defined in a similar way as the libc and compiler builtin
+ * ffsll, but returns the position of the most significant set bit.
+ *
+ * fls64(value) returns 0 if value is 0 or the position of the last
+ * set bit if value is nonzero. The last (most significant) bit is
+ * at position 64.
+ */
+#define fls64(x) \
+	(__builtin_constant_p(x) ? constant_fls64(x) : variable_fls64(x))
 #else
 #include <asm-generic/bitops/fls64.h>
 #endif
