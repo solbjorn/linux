@@ -285,19 +285,7 @@ static __always_inline unsigned long variable_ffz(unsigned long word)
 	 (unsigned long)__builtin_ctzl(~word) :	\
 	 variable_ffz(word))
 
-/*
- * __fls: find last set bit in word
- * @word: The word to search
- *
- * Undefined if no set bit exists, so code should check against 0 first.
- */
-static __always_inline unsigned long __fls(unsigned long word)
-{
-	asm("bsr %1,%0"
-	    : "=r" (word)
-	    : "rm" (word));
-	return word;
-}
+#include <asm-generic/bitops/builtin-__fls.h>
 
 #undef ADDR
 
