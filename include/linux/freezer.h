@@ -85,6 +85,31 @@ static inline bool try_to_freeze(void) { return false; }
 
 static inline void set_freezable(void) {}
 
+#define freezable_schedule()  schedule()
+
+#define freezable_schedule_unsafe()  schedule()
+
+#define freezable_schedule_timeout(timeout)  schedule_timeout(timeout)
+
+#define freezable_schedule_timeout_interruptible(timeout)		\
+	schedule_timeout_interruptible(timeout)
+
+#define freezable_schedule_timeout_interruptible_unsafe(timeout)	\
+	schedule_timeout_interruptible(timeout)
+
+#define freezable_schedule_timeout_killable(timeout)			\
+	schedule_timeout_killable(timeout)
+
+#define freezable_schedule_timeout_killable_unsafe(timeout)		\
+	schedule_timeout_killable(timeout)
+
+#define freezable_schedule_hrtimeout_range(expires, delta, mode)	\
+	schedule_hrtimeout_range(expires, delta, mode)
+
+#define wait_event_freezekillable_unsafe(wq, condition)			\
+		wait_event_killable(wq, condition)
+
+#define pm_freezing (false)
 #endif /* !CONFIG_FREEZER */
 
 #endif	/* FREEZER_H_INCLUDED */
