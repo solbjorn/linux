@@ -4450,6 +4450,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.burst_time      = 0;
 #endif // CONFIG_SCHED_BORE
 	INIT_LIST_HEAD(&p->se.group_node);
+	RB_CLEAR_NODE(&p->se.latency_node);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
