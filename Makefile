@@ -910,6 +910,7 @@ endif
 stackp-flags-y                                    := -fno-stack-protector
 stackp-flags-$(CONFIG_STACKPROTECTOR)             := -fstack-protector
 stackp-flags-$(CONFIG_STACKPROTECTOR_STRONG)      := -fstack-protector-strong
+stackp-flags-$(CONFIG_STACKPROTECTOR_STRONG)      += --param=ssp-buffer-size=4
 
 KBUILD_CFLAGS += $(stackp-flags-y)
 
