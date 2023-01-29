@@ -135,7 +135,7 @@ SECTIONS
 		SOFTIRQENTRY_TEXT
 #ifdef CONFIG_RETPOLINE
 		__indirect_thunk_start = .;
-		*(.text.__x86.*)
+		KEEP(*(.text.__x86.*))
 		__indirect_thunk_end = .;
 #endif
 		STATIC_CALL_TEXT
@@ -239,14 +239,14 @@ SECTIONS
 	 * See static_cpu_has() for an example.
 	 */
 	.altinstr_aux : AT(ADDR(.altinstr_aux) - LOAD_OFFSET) {
-		*(.altinstr_aux)
+		KEEP(*(.altinstr_aux))
 	}
 
 	INIT_DATA_SECTION(16)
 
 	.x86_cpu_dev.init : AT(ADDR(.x86_cpu_dev.init) - LOAD_OFFSET) {
 		__x86_cpu_dev_start = .;
-		*(.x86_cpu_dev.init)
+		KEEP(*(.x86_cpu_dev.init))
 		__x86_cpu_dev_end = .;
 	}
 
@@ -254,7 +254,7 @@ SECTIONS
 	.x86_intel_mid_dev.init : AT(ADDR(.x86_intel_mid_dev.init) - \
 								LOAD_OFFSET) {
 		__x86_intel_mid_dev_start = .;
-		*(.x86_intel_mid_dev.init)
+		KEEP(*(.x86_intel_mid_dev.init))
 		__x86_intel_mid_dev_end = .;
 	}
 #endif
@@ -268,7 +268,7 @@ SECTIONS
 	. = ALIGN(8);
 	.parainstructions : AT(ADDR(.parainstructions) - LOAD_OFFSET) {
 		__parainstructions = .;
-		*(.parainstructions)
+		KEEP(*(.parainstructions))
 		__parainstructions_end = .;
 	}
 
@@ -281,21 +281,21 @@ SECTIONS
 	. = ALIGN(8);
 	.retpoline_sites : AT(ADDR(.retpoline_sites) - LOAD_OFFSET) {
 		__retpoline_sites = .;
-		*(.retpoline_sites)
+		KEEP(*(.retpoline_sites))
 		__retpoline_sites_end = .;
 	}
 
 	. = ALIGN(8);
 	.return_sites : AT(ADDR(.return_sites) - LOAD_OFFSET) {
 		__return_sites = .;
-		*(.return_sites)
+		KEEP(*(.return_sites))
 		__return_sites_end = .;
 	}
 
 	. = ALIGN(8);
 	.call_sites : AT(ADDR(.call_sites) - LOAD_OFFSET) {
 		__call_sites = .;
-		*(.call_sites)
+		KEEP(*(.call_sites))
 		__call_sites_end = .;
 	}
 #endif
@@ -304,7 +304,7 @@ SECTIONS
 	. = ALIGN(8);
 	.ibt_endbr_seal : AT(ADDR(.ibt_endbr_seal) - LOAD_OFFSET) {
 		__ibt_endbr_seal = .;
-		*(.ibt_endbr_seal)
+		KEEP(*(.ibt_endbr_seal))
 		__ibt_endbr_seal_end = .;
 	}
 #endif
@@ -313,7 +313,7 @@ SECTIONS
 	. = ALIGN(8);
 	.cfi_sites : AT(ADDR(.cfi_sites) - LOAD_OFFSET) {
 		__cfi_sites = .;
-		*(.cfi_sites)
+		KEEP(*(.cfi_sites))
 		__cfi_sites_end = .;
 	}
 #endif
@@ -326,7 +326,7 @@ SECTIONS
 	. = ALIGN(8);
 	.altinstructions : AT(ADDR(.altinstructions) - LOAD_OFFSET) {
 		__alt_instructions = .;
-		*(.altinstructions)
+		KEEP(*(.altinstructions))
 		__alt_instructions_end = .;
 	}
 
@@ -336,13 +336,13 @@ SECTIONS
 	 * get the address and the length of them to patch the kernel safely.
 	 */
 	.altinstr_replacement : AT(ADDR(.altinstr_replacement) - LOAD_OFFSET) {
-		*(.altinstr_replacement)
+		KEEP(*(.altinstr_replacement))
 	}
 
 	. = ALIGN(8);
 	.apicdrivers : AT(ADDR(.apicdrivers) - LOAD_OFFSET) {
 		__apicdrivers = .;
-		*(.apicdrivers);
+		KEEP(*(.apicdrivers))
 		__apicdrivers_end = .;
 	}
 
@@ -377,7 +377,7 @@ SECTIONS
 	. = ALIGN(PAGE_SIZE);
 	.smp_locks : AT(ADDR(.smp_locks) - LOAD_OFFSET) {
 		__smp_locks = .;
-		*(.smp_locks)
+		KEEP(*(.smp_locks))
 		. = ALIGN(PAGE_SIZE);
 		__smp_locks_end = .;
 	}
@@ -412,7 +412,7 @@ SECTIONS
 	.brk : AT(ADDR(.brk) - LOAD_OFFSET) {
 		__brk_base = .;
 		. += 64 * 1024;		/* 64k alignment slop space */
-		*(.bss..brk)		/* areas brk users have reserved */
+		KEEP(*(.bss..brk))	/* areas brk users have reserved */
 		__brk_limit = .;
 	}
 
@@ -438,7 +438,7 @@ SECTIONS
 	. = ALIGN(HPAGE_SIZE);
 	.init.scratch : AT(ADDR(.init.scratch) - LOAD_OFFSET) {
 		__init_scratch_begin = .;
-		*(.init.scratch)
+		KEEP(*(.init.scratch))
 		. = ALIGN(HPAGE_SIZE);
 		__init_scratch_end = .;
 	}
