@@ -23,8 +23,7 @@ static ATOMIC_NOTIFIER_HEAD(random_ready_notifier);
 
 /********************************** Helper ***********************************/
 
-static bool lrng_trust_bootloader __initdata =
-	IS_ENABLED(CONFIG_RANDOM_TRUST_BOOTLOADER);
+static bool lrng_trust_bootloader __initdata = true;
 
 static int __init lrng_parse_trust_bootloader(char *arg)
 {
@@ -83,6 +82,7 @@ void lrng_kick_random_ready(void)
  *	    insert into entropy pool.
  * @count: length of buffer
  * @entropy_bits: amount of entropy in buffer (value is in bits)
+ * @sleep_after: whether to wait in case the pool is full
  */
 void add_hwgenerator_randomness(const void *buffer, size_t count,
 				size_t entropy_bits, bool sleep_after)
@@ -108,7 +108,7 @@ EXPORT_SYMBOL_GPL(add_hwgenerator_randomness);
  *
  * If the seed is trustworthy, it would be regarded as hardware RNGs. Otherwise
  * it would be regarded as device data.
- * The decision is controlled by CONFIG_RANDOM_TRUST_BOOTLOADER.
+ * The decision is controlled by cmdline.
  *
  * @buf: buffer holding the entropic data from HW noise sources to be used to
  *	 insert into entropy pool.

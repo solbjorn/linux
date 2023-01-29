@@ -24,11 +24,7 @@
  */
 #define LRNG_ARCHRANDOM_DEFAULT_STRENGTH CONFIG_LRNG_CPU_ENTROPY_RATE
 #define LRNG_ARCHRANDOM_TRUST_CPU_STRENGTH LRNG_DRNG_SECURITY_STRENGTH_BITS
-#ifdef CONFIG_RANDOM_TRUST_CPU
 static u32 cpu_entropy = LRNG_ARCHRANDOM_TRUST_CPU_STRENGTH;
-#else
-static u32 cpu_entropy = LRNG_ARCHRANDOM_DEFAULT_STRENGTH;
-#endif
 #ifdef CONFIG_LRNG_RUNTIME_ES_CONFIG
 module_param(cpu_entropy, uint, 0644);
 MODULE_PARM_DESC(cpu_entropy, "Entropy in bits of 256 data bits from CPU noise source (e.g. RDSEED)");
