@@ -89,7 +89,14 @@
  *   - DYNAMIC_BMI2 is enabled
  *   - BMI2 is supported at compile time
  */
-#define ZSTD_ENABLE_ASM_X86_64_BMI2 0
+#if !defined(ZSTD_DISABLE_ASM) &&                                 \
+    ZSTD_ASM_SUPPORTED &&                                         \
+    defined(__x86_64__) &&                                        \
+    (DYNAMIC_BMI2 || defined(__BMI2__))
+# define ZSTD_ENABLE_ASM_X86_64_BMI2 1
+#else
+# define ZSTD_ENABLE_ASM_X86_64_BMI2 0
+#endif
 
 /*
  * For x86 ELF targets, add .note.gnu.property section for Intel CET in
