@@ -3683,23 +3683,52 @@ void __init cpuset_init_smp(void)
 	BUG_ON(!cpuset_migrate_mm_wq);
 }
 
+static const struct cpumask *__cs_cpus_allowed(struct cpuset *cs)
+{
+	const struct cpumask *cs_mask = cs->cpus_allowed;
+	if (!parent_cs(cs))
+		cs_mask = cpu_possible_mask;
+	return cs_mask;
+}
+
+static void cs_cpus_allowed(struct cpuset *cs, struct cpumask *pmask)
+{
+	do {
+		cpumask_and(pmask, pmask, __cs_cpus_allowed(cs));
+		cs = parent_cs(cs);
+	} while (cs);
+}
+
 /**
  * cpuset_cpus_allowed - return cpus_allowed mask from a tasks cpuset.
  * @tsk: pointer to task_struct from which to obtain cpuset->cpus_allowed.
  * @pmask: pointer to struct cpumask variable to receive cpus_allowed set.
  *
- * Description: Returns the cpumask_var_t cpus_allowed of the cpuset
- * attached to the specified @tsk.  Guaranteed to return some non-empty
- * subset of cpu_online_mask, even if this means going outside the
- * tasks cpuset.
+ * Description: Returns the cpumask_var_t cpus_allowed of the cpuset attached
+ * to the specified @tsk.  Guaranteed to return some non-empty intersection
+ * with cpu_online_mask, even if this means going outside the tasks cpuset.
  **/
 
 void cpuset_cpus_allowed(struct task_struct *tsk, struct cpumask *pmask)
 {
 	unsigned long flags;
+	struct cpuset *cs;
 
 	spin_lock_irqsave(&callback_lock, flags);
-	guarantee_online_cpus(tsk, pmask);
+	rcu_read_lock();
+
+	cs = task_cs(tsk);
+	do {
+		cpumask_copy(pmask, task_cpu_possible_mask(tsk));
+		cs_cpus_allowed(cs, pmask);
+
+		if (cpumask_intersects(pmask, cpu_online_mask)) {
+			break;
+
+		cs = parent_cs(cs);
+	} while (cs);
+
+	rcu_read_unlock();
 	spin_unlock_irqrestore(&callback_lock, flags);
 }
 
