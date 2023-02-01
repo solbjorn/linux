@@ -1021,7 +1021,7 @@ static int ipmi_thread(void *data)
 				schedule();
 			}
 		} else {
-			schedule_timeout_interruptible(1);
+			schedule_min_hrtimeout_interruptible();
 		}
 	}
 	return 0;
@@ -1287,7 +1287,7 @@ static int wait_for_msg_done(struct smi_info *smi_info)
 	for (;;) {
 		if (smi_result == SI_SM_CALL_WITH_DELAY ||
 		    smi_result == SI_SM_CALL_WITH_TICK_DELAY) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 			smi_result = smi_info->handlers->event(
 				smi_info->si_sm, jiffies_to_usecs(1));
 		} else if (smi_result == SI_SM_CALL_WITHOUT_DELAY) {
@@ -2163,7 +2163,7 @@ static void wait_msg_processed(struct smi_info *smi_info)
 		time_diff = (((long)jiffies_now - (long)smi_info->last_timeout_jiffies)
 		     * SI_USEC_PER_JIFFY);
 		smi_event_handler(smi_info, time_diff);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 }
 

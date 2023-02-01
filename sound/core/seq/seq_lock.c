@@ -20,7 +20,7 @@ void snd_use_lock_sync_helper(snd_use_lock_t *lockp, const char *file, int line)
 	while (atomic_read(lockp) > 0) {
 		if (warn_count-- == 0)
 			pr_warn("ALSA: seq_lock: waiting [%d left] in %s:%d\n", atomic_read(lockp), file, line);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 }
 EXPORT_SYMBOL(snd_use_lock_sync_helper);

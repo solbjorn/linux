@@ -895,14 +895,14 @@ static void cn23xx_disable_io_queues(struct octeon_device *oct)
 		while (!(READ_ONCE(d64) & BIT_ULL(q_no)) && loop--) {
 			WRITE_ONCE(d64, octeon_read_csr64(
 					oct, CN23XX_SLI_PKT_IOQ_RING_RST));
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 		/* Reset the doorbell register for this Input Queue. */
 		octeon_write_csr(oct, CN23XX_SLI_IQ_DOORBELL(q_no), 0xFFFFFFFF);
 		while (octeon_read_csr64(oct, CN23XX_SLI_IQ_DOORBELL(q_no)) &&
 		       loop--) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 	}
 
@@ -919,7 +919,7 @@ static void cn23xx_disable_io_queues(struct octeon_device *oct)
 		while (!(READ_ONCE(d64) & BIT_ULL(q_no)) && loop--) {
 			WRITE_ONCE(d64, octeon_read_csr64(
 					oct, CN23XX_SLI_PKT_IOQ_RING_RST));
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 		/* Reset the doorbell register for this Output Queue. */
@@ -928,7 +928,7 @@ static void cn23xx_disable_io_queues(struct octeon_device *oct)
 		while (octeon_read_csr64(oct,
 					 CN23XX_SLI_OQ_PKTS_CREDIT(q_no)) &&
 		       loop--) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 		/* clear the SLI_PKT(0..63)_CNTS[CNT] reg value */
@@ -1497,7 +1497,7 @@ int cn23xx_get_vf_stats(struct octeon_device *oct, int vfidx,
 	octeon_mbox_write(oct, &mbox_cmd);
 
 	do {
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while ((atomic_read(&ctx.status) == 0) && (count++ < timeout));
 
 	ret = atomic_read(&ctx.status);

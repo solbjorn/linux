@@ -267,7 +267,7 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 		put_rng(rng);
 
 		if (need_resched())
-			schedule_timeout_interruptible(1);
+			schedule_min_hrtimeout_interruptible();
 
 		if (signal_pending(current)) {
 			err = -ERESTARTSYS;

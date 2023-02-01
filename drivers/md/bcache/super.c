@@ -1122,7 +1122,7 @@ static void cancel_writeback_rate_update_dwork(struct cached_dev *dc)
 			      &dc->disk.flags))
 			break;
 		time_out--;
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 	} while (time_out > 0);
 
 	if (time_out == 0)

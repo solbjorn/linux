@@ -645,8 +645,8 @@ srcu_read_delay(struct torture_random_state *rrsp, struct rt_read_seg *rtrsp)
 	delay = torture_random(rrsp) %
 		(nrealreaders * 2 * longdelay * uspertick);
 	if (!delay && in_task()) {
-		schedule_timeout_interruptible(longdelay);
-		rtrsp->rt_delay_jiffies = longdelay;
+		schedule_msec_hrtimeout_interruptible(longdelay);
+		rtrsp->rt_delay_jiffies = msecs_to_jiffies(longdelay);
 	} else {
 		rcu_read_delay(rrsp, rtrsp);
 	}
@@ -1148,7 +1148,7 @@ static int rcu_torture_boost(void *arg)
 				mutex_unlock(&boost_mutex);
 				break;
 			}
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 		/* Go do the stutter. */
@@ -1159,7 +1159,7 @@ checkwait:	if (stutter_wait("rcu_torture_boost"))
 	/* Clean up and exit. */
 	while (!kthread_should_stop()) {
 		torture_shutdown_absorb("rcu_torture_boost");
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 	torture_kthread_stopping("rcu_torture_boost");
 	return 0;
@@ -1182,7 +1182,7 @@ rcu_torture_fqs(void *arg)
 		fqs_resume_time = jiffies + fqs_stutter * HZ;
 		while (time_before(jiffies, fqs_resume_time) &&
 		       !kthread_should_stop()) {
-			schedule_timeout_interruptible(1);
+			schedule_min_hrtimeout_interruptible();
 		}
 		fqs_burst_remaining = fqs_duration;
 		while (fqs_burst_remaining > 0 &&
@@ -2774,7 +2774,7 @@ static void rcu_torture_fwd_prog_cr(struct rcu_fwd *rfp)
 		} else if (!cur_ops->cbflood_max || cur_ops->cbflood_max > n_max_cbs) {
 			rfcp = kmalloc(sizeof(*rfcp), GFP_KERNEL);
 			if (WARN_ON_ONCE(!rfcp)) {
-				schedule_timeout_interruptible(1);
+				schedule_min_hrtimeout_interruptible();
 				continue;
 			}
 			n_max_cbs++;
@@ -2898,7 +2898,7 @@ static int rcu_torture_fwd_prog(void *args)
 			WRITE_ONCE(rcu_fwd_seq, rcu_fwd_seq + 1);
 		} else {
 			while (READ_ONCE(rcu_fwd_seq) == oldseq && !torture_must_stop())
-				schedule_timeout_interruptible(1);
+				schedule_min_hrtimeout_interruptible();
 			oldseq = READ_ONCE(rcu_fwd_seq);
 		}
 		pr_alert("%s: Starting forward-progress test %d\n", __func__, rfp->rcu_fwd_id);
@@ -3087,7 +3087,7 @@ static int rcu_torture_barrier(void *arg)
 			do {
 				if (WARN_ON(i++ > HZ))
 					i = INT_MIN;
-				schedule_timeout_interruptible(1);
+				schedule_min_hrtimeout_interruptible();
 				cur_ops->cb_barrier();
 			} while (atomic_read(&barrier_cbs_invoked) !=
 				 n_barrier_cbs &&
@@ -3199,7 +3199,7 @@ static int rcu_torture_read_exit_child(void *trsp_in)
 	set_user_nice(current, MAX_NICE);
 	// Minimize time between reading and exiting.
 	while (!kthread_should_stop())
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	(void)rcu_torture_one_read(trsp, -1);
 	return 0;
 }
@@ -3247,7 +3247,7 @@ static int rcu_torture_read_exit(void *unused)
 	smp_mb(); // Store before wakeup.
 	wake_up(&read_exit_wq);
 	while (!torture_must_stop())
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	torture_kthread_stopping("rcu_torture_read_exit");
 	return 0;
 }

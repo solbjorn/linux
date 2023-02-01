@@ -1462,7 +1462,7 @@ stop_iso_gracefull(struct usb_fifo *fifo)
 	for (i = 0; i < 2; i++) {
 		timeout = 3;
 		while (fifo->stop_gracefull && timeout--)
-			schedule_timeout_interruptible((HZ / 1000) * 16);
+			schedule_msec_hrtimeout_interruptible(16);
 		if (debug && fifo->stop_gracefull)
 			printk(KERN_DEBUG "%s: ERROR %s for fifo %i.%i\n",
 			       hw->name, __func__, fifo->fifonum, i);
@@ -1485,7 +1485,7 @@ stop_int_gracefull(struct usb_fifo *fifo)
 
 	timeout = 3;
 	while (fifo->stop_gracefull && timeout--)
-		schedule_timeout_interruptible((HZ / 1000) * 3);
+		schedule_msec_hrtimeout_interruptible(3);
 	if (debug && fifo->stop_gracefull)
 		printk(KERN_DEBUG "%s: ERROR %s for fifo %i\n",
 		       hw->name, __func__, fifo->fifonum);

@@ -486,7 +486,7 @@ int ad1843_init(struct snd_ad1843 *ad1843)
 			       "ad1843: AD1843 won't power up\n");
 			return -EIO;
 		}
-		schedule_timeout_interruptible(5);
+		schedule_msec_hrtimeout_interruptible(5);
 	}
 
 	/* 5. Power up the clock generators and enable clock output pins. */

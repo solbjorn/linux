@@ -330,7 +330,7 @@ static void vt1724_midi_output_drain(struct snd_rawmidi_substream *s)
 	do {
 		if (inb(ICEREG1724(ice, MPU_CTRL)) & VT1724_MPU_TX_EMPTY)
 			break;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while (time_after(timeout, jiffies));
 }
 

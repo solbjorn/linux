@@ -455,7 +455,7 @@ static int pontis_gpio_mask_get(struct snd_kcontrol *kcontrol, struct snd_ctl_el
 	mutex_unlock(&ice->gpio_mutex);
 	return 0;
 }
-	
+
 static int pontis_gpio_mask_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_ice1712 *ice = snd_kcontrol_chip(kcontrol);
@@ -479,7 +479,7 @@ static int pontis_gpio_dir_get(struct snd_kcontrol *kcontrol, struct snd_ctl_ele
 	mutex_unlock(&ice->gpio_mutex);
 	return 0;
 }
-	
+
 static int pontis_gpio_dir_put(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_ice1712 *ice = snd_kcontrol_chip(kcontrol);
@@ -755,7 +755,7 @@ static int pontis_init(struct snd_ice1712 *ice)
 	/* initialize WM8776 codec */
 	for (i = 0; i < ARRAY_SIZE(wm_inits); i += 2)
 		wm_put(ice, wm_inits[i], wm_inits[i+1]);
-	schedule_timeout_uninterruptible(1);
+	schedule_min_hrtimeout_uninterruptible();
 	for (i = 0; i < ARRAY_SIZE(wm_inits2); i += 2)
 		wm_put(ice, wm_inits2[i], wm_inits2[i+1]);
 

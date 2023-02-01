@@ -362,7 +362,7 @@ void lio_cn6xxx_disable_io_queues(struct octeon_device *oct)
 	d32 = octeon_read_csr(oct, CN6XXX_SLI_PORT_IN_RST_IQ);
 	while (((d32 & mask) != mask) && loop--) {
 		d32 = octeon_read_csr(oct, CN6XXX_SLI_PORT_IN_RST_IQ);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 
 	/* Reset the doorbell register for each Input queue. */
@@ -384,7 +384,7 @@ void lio_cn6xxx_disable_io_queues(struct octeon_device *oct)
 	d32 = octeon_read_csr(oct, CN6XXX_SLI_PORT_IN_RST_OQ);
 	while (((d32 & mask) != mask) && loop--) {
 		d32 = octeon_read_csr(oct, CN6XXX_SLI_PORT_IN_RST_OQ);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 	;
 

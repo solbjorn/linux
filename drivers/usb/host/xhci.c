@@ -3200,7 +3200,7 @@ rescan:
 	/* wait for hub_tt_work to finish clearing hub TT */
 	if (ep->ep_state & EP_CLEARING_TT) {
 		spin_unlock_irqrestore(&xhci->lock, flags);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		goto rescan;
 	}
 

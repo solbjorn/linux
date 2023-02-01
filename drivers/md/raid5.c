@@ -6539,7 +6539,7 @@ static inline sector_t raid5_sync_request(struct mddev *mddev, sector_t sector_n
 		/* make sure we don't swamp the stripe cache if someone else
 		 * is trying to get access
 		 */
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 	/* Need to check if array will still be degraded after recovery/resync
 	 * Note in case of > 1 drive failures it's possible we're rebuilding

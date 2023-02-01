@@ -31,9 +31,9 @@
 #define LCD_CMD_SET_DDRAM_ADDR	0x80	/* Set display data RAM address */
 
 /* sleeps that many milliseconds with a reschedule */
-static void long_sleep(int ms)
+static void long_sleep(long ms)
 {
-	schedule_timeout_interruptible(msecs_to_jiffies(ms));
+	schedule_msec_hrtimeout_interruptible(ms);
 }
 
 int hd44780_common_print(struct charlcd *lcd, int c)

@@ -1514,7 +1514,7 @@ static int bcm_release(struct socket *sock)
 	spin_lock(&bcm_notifier_lock);
 	while (bcm_busy_notifier == bo) {
 		spin_unlock(&bcm_notifier_lock);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		spin_lock(&bcm_notifier_lock);
 	}
 	list_del(&bo->notifier);

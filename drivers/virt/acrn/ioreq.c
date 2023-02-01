@@ -236,7 +236,7 @@ void acrn_ioreq_request_clear(struct acrn_vm *vm)
 		spin_unlock_bh(&vm->ioreq_clients_lock);
 
 		if (has_pending)
-			schedule_timeout_interruptible(HZ / 100);
+			schedule_msec_hrtimeout_interruptible(10);
 	} while (has_pending && --retry > 0);
 	if (retry == 0)
 		dev_warn(acrn_dev.this_device,

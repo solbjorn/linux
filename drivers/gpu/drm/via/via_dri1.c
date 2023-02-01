@@ -255,7 +255,7 @@ do {								\
 			ret = -EBUSY;				\
 			break;					\
 		}						\
-		schedule_timeout((HZ/100 > 1) ? HZ/100 : 1);	\
+		schedule_msec_hrtimeout(10);			\
 		if (signal_pending(current)) {			\
 			ret = -EINTR;				\
 			break;					\

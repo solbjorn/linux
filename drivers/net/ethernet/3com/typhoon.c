@@ -395,7 +395,7 @@ typhoon_reset(void __iomem *ioaddr, int wait_type)
 				goto out;
 
 			if (wait_type == WaitSleep)
-				schedule_timeout_uninterruptible(1);
+				schedule_min_hrtimeout_uninterruptible();
 			else
 				udelay(TYPHOON_UDELAY);
 		}

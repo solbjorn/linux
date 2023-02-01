@@ -675,7 +675,7 @@ static int lock_torture_writer(void *arg)
 
 	do {
 		if ((torture_random(&rand) & 0xfffff) == 0)
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 
 		cxt.cur_ops->task_boost(&rand);
 		cxt.cur_ops->writelock(tid);
@@ -714,7 +714,7 @@ static int lock_torture_reader(void *arg)
 
 	do {
 		if ((torture_random(&rand) & 0xfffff) == 0)
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 
 		cxt.cur_ops->readlock(tid);
 		atomic_inc(&lock_is_read_held);

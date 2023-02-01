@@ -3,7 +3,7 @@
  *  ipmi_bt_sm.c
  *
  *  The state machine for an Open IPMI BT sub-driver under ipmi_si.c, part
- *  of the driver architecture at http://sourceforge.net/projects/openipmi 
+ *  of the driver architecture at http://sourceforge.net/projects/openipmi
  *
  *  Author:	Rocky Craig <first.last@hp.com>
  */
@@ -646,8 +646,8 @@ static int bt_detect(struct si_sm_data *bt)
 	for (;;) {
 		if (smi_result == SI_SM_CALL_WITH_DELAY ||
 		    smi_result == SI_SM_CALL_WITH_TICK_DELAY) {
-			schedule_timeout_uninterruptible(1);
-			smi_result = bt_event(bt, jiffies_to_usecs(1));
+			schedule_msec_hrtimeout_uninterruptible(1);
+			smi_result = bt_event(bt, USEC_PER_MSEC);
 		} else if (smi_result == SI_SM_CALL_WITHOUT_DELAY) {
 			smi_result = bt_event(bt, 0);
 		} else

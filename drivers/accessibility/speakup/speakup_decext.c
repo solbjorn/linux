@@ -213,8 +213,7 @@ static void do_catch_up(struct spk_synth *synth)
 				delay_time_val = delay_time->u.n.value;
 				spin_unlock_irqrestore(&speakup_info.spinlock,
 						       flags);
-				schedule_timeout(msecs_to_jiffies
-						 (delay_time_val));
+				schedule_msec_hrtimeout(delay_time_val);
 				jiff_max = jiffies + jiffy_delta_val;
 			}
 		}
@@ -261,4 +260,3 @@ MODULE_AUTHOR("David Borowski");
 MODULE_DESCRIPTION("Speakup support for DECtalk External synthesizers");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
-

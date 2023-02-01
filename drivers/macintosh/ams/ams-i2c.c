@@ -97,7 +97,7 @@ static int ams_i2c_cmd(enum ams_i2c_cmd cmd)
 		if (result == 0 || result & 0x80)
 			return 0;
 
-		schedule_timeout_uninterruptible(HZ / 20);
+		schedule_msec_hrtimeout_uninterruptible(50);
 	}
 
 	return -1;

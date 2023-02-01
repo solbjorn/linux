@@ -69,7 +69,6 @@ static DEFINE_MUTEX(dev_mutex);
 static struct workqueue_struct *reg_workq;
 
 #define DB_FC_RESUME_SIZE 64
-#define DB_FC_RESUME_DELAY 1
 #define DB_FC_DRAIN_THRESH 0
 
 static struct dentry *c4iw_debugfs_root;
@@ -1336,10 +1335,8 @@ static void resume_queues(struct uld_ctx *ctx)
 			}
 			if (!list_empty(&ctx->dev->db_fc_list)) {
 				xa_unlock_irq(&ctx->dev->qps);
-				if (DB_FC_RESUME_DELAY) {
-					set_current_state(TASK_UNINTERRUPTIBLE);
-					schedule_timeout(DB_FC_RESUME_DELAY);
-				}
+				set_current_state(TASK_UNINTERRUPTIBLE);
+				schedule_min_hrtimeout();
 				xa_lock_irq(&ctx->dev->qps);
 				if (ctx->dev->db_state != FLOW_CONTROL)
 					break;
@@ -1407,7 +1404,7 @@ static void recover_lost_dbs(struct uld_ctx *ctx, struct qp_list *qp_list)
 		/* Wait for the dbfifo to drain */
 		while (cxgb4_dbfifo_count(qp->rhp->rdev.lldi.ports[0], 1) > 0) {
 			set_current_state(TASK_UNINTERRUPTIBLE);
-			schedule_timeout(usecs_to_jiffies(10));
+			schedule_usec_hrtimeout(10);
 		}
 	}
 }
@@ -1422,7 +1419,7 @@ static void recover_queues(struct uld_ctx *ctx)
 
 	/* slow everybody down */
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(usecs_to_jiffies(1000));
+	schedule_min_hrtimeout();
 
 	/* flush the SGE contexts */
 	ret = cxgb4_flush_eq_cache(ctx->dev->rdev.lldi.ports[0]);

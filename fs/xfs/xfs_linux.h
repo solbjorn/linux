@@ -138,7 +138,10 @@ typedef __u32			xfs_nlink_t;
 
 static inline void delay(long ticks)
 {
-	schedule_timeout_uninterruptible(ticks);
+	if (__builtin_constant_p(ticks) && ticks == 1)
+		schedule_min_hrtimeout_uninterruptible();
+	else
+		schedule_msec_hrtimeout_uninterruptible(ticks);
 }
 
 /*

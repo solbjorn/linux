@@ -1451,7 +1451,7 @@ static int __cxgb_close(struct net_device *dev, int on_wq)
 	struct port_info *pi = netdev_priv(dev);
 	struct adapter *adapter = pi->adapter;
 
-	
+
 	if (!adapter->open_device_map)
 		return 0;
 
@@ -2824,7 +2824,7 @@ static void db_drop_task(struct work_struct *work)
 	get_random_bytes(&r, 2);
 	delay += r & 1023;
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(usecs_to_jiffies(delay));
+	schedule_usec_hrtimeout(delay);
 	ring_dbs(adapter);
 }
 

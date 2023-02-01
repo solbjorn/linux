@@ -818,7 +818,7 @@ static void qe_uart_shutdown(struct uart_port *port)
 			break;
 		}
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(2);
+		schedule_msec_hrtimeout(2);
 	}
 
 	if (qe_port->wait_closing) {
@@ -1535,4 +1535,3 @@ MODULE_DESCRIPTION("Freescale QUICC Engine (QE) UART");
 MODULE_AUTHOR("Timur Tabi <timur@freescale.com>");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS_CHARDEV_MAJOR(SERIAL_QE_MAJOR);
-

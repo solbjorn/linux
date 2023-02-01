@@ -1364,7 +1364,7 @@ init_chip(struct hfc_multi *hc)
 		       "HFC_multi F0_CNT %ld after reset\n", val);
 	spin_unlock_irqrestore(&hc->lock, flags);
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout((HZ / 100) ? : 1); /* Timeout minimum 10ms */
+	schedule_msec_hrtimeout(10); /* Timeout minimum 10ms */
 	spin_lock_irqsave(&hc->lock, flags);
 	val2 = HFC_inb(hc, R_F0_CNTL);
 	val2 += HFC_inb(hc, R_F0_CNTH) << 8;
@@ -1423,7 +1423,7 @@ init_chip(struct hfc_multi *hc)
 			HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x00);
 			spin_unlock_irqrestore(&hc->lock, flags);
 			set_current_state(TASK_UNINTERRUPTIBLE);
-			schedule_timeout((HZ / 100) ?: 1); /* Timeout min. 10ms */
+			schedule_msec_hrtimeout(10); /* Timeout min. 10ms */
 			spin_lock_irqsave(&hc->lock, flags);
 			val2 = HFC_inb(hc, R_F0_CNTL);
 			val2 += HFC_inb(hc, R_F0_CNTH) << 8;

@@ -869,7 +869,7 @@ static int fd_eject(struct floppy_state *fs)
 			break;
 		}
 		swim3_select(fs, RELAX);
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 		if (swim3_readbit(fs, DISK_IN) == 0)
 			break;
 	}
@@ -888,7 +888,7 @@ static int floppy_locked_ioctl(struct block_device *bdev, fmode_t mode,
 {
 	struct floppy_state *fs = bdev->bd_disk->private_data;
 	int err;
-		
+
 	if ((cmd & 0x80) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
@@ -950,7 +950,7 @@ static int floppy_open(struct block_device *bdev, fmode_t mode)
 				break;
 			}
 			swim3_select(fs, RELAX);
-			schedule_timeout_interruptible(1);
+			schedule_min_hrtimeout_interruptible();
 		}
 		if (err == 0 && (swim3_readbit(fs, SEEK_COMPLETE) == 0
 				 || swim3_readbit(fs, DISK_IN) == 0))
@@ -1053,7 +1053,7 @@ static int floppy_revalidate(struct gendisk *disk)
 		if (signal_pending(current))
 			break;
 		swim3_select(fs, RELAX);
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 	}
 	ret = swim3_readbit(fs, SEEK_COMPLETE) == 0
 		|| swim3_readbit(fs, DISK_IN) == 0;
@@ -1130,7 +1130,7 @@ static int swim3_add_device(struct macio_dev *mdev, int index)
 
 	if (mdev->media_bay == NULL)
 		pmac_call_feature(PMAC_FTR_SWIM3_ENABLE, swim, 0, 1);
-	
+
 	fs->state = idle;
 	fs->swim3 = (struct swim3 __iomem *)
 		ioremap(macio_resource_start(mdev, 0), 0x200);

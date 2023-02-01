@@ -6,7 +6,7 @@
  *
  *   This is modified (by Sasha Khapyorsky <sashak@alsa-project.org>) version
  *   of ALSA ICH sound driver intel8x0.c .
- */      
+ */
 
 #include <linux/io.h>
 #include <linux/delay.h>
@@ -127,7 +127,7 @@ DEFINE_REGSET(OFF, 0);		/* offset */
 
 
 /*
- *  
+ *
  */
 
 enum { ICHD_MDMIN, ICHD_MDMOUT, ICHD_MDMLAST = ICHD_MDMOUT };
@@ -181,7 +181,7 @@ struct intel8x0m {
 	struct snd_ac97 *ac97;
 
 	spinlock_t reg_lock;
-	
+
 	struct snd_dma_buffer *bdbars;
 	u32 bdbars_count;
 	u32 int_sta_reg;		/* interrupt status register */
@@ -284,7 +284,7 @@ static unsigned int get_ich_codec_bit(struct intel8x0m *chip, unsigned int codec
 static int snd_intel8x0m_codec_semaphore(struct intel8x0m *chip, unsigned int codec)
 {
 	int time;
-	
+
 	if (codec > 1)
 		return -EIO;
 	codec = get_ich_codec_bit(chip, codec);
@@ -311,13 +311,13 @@ static int snd_intel8x0m_codec_semaphore(struct intel8x0m *chip, unsigned int co
 	/* I don't care about the semaphore */
 	return -EBUSY;
 }
- 
+
 static void snd_intel8x0m_codec_write(struct snd_ac97 *ac97,
 				      unsigned short reg,
 				      unsigned short val)
 {
 	struct intel8x0m *chip = ac97->private_data;
-	
+
 	if (snd_intel8x0m_codec_semaphore(chip, ac97->num) < 0) {
 		if (! chip->in_ac97_init)
 			dev_err(chip->card->dev,
@@ -496,7 +496,7 @@ static irqreturn_t snd_intel8x0m_interrupt(int irq, void *dev_id)
 	/* ack them */
 	iputdword(chip, chip->int_sta_reg, status & chip->int_sta_mask);
 	spin_unlock(&chip->reg_lock);
-	
+
 	return IRQ_HANDLED;
 }
 
@@ -761,7 +761,7 @@ static int snd_intel8x0m_pcm(struct intel8x0m *chip)
 	chip->pcm_devs = device;
 	return 0;
 }
-	
+
 
 /*
  *  Mixer part
@@ -793,7 +793,7 @@ static int snd_intel8x0m_mixer(struct intel8x0m *chip, int ac97_clock)
 	};
 
 	chip->in_ac97_init = 1;
-	
+
 	memset(&ac97, 0, sizeof(ac97));
 	ac97.private_data = chip;
 	ac97.private_free = snd_intel8x0m_mixer_free_ac97;
@@ -845,7 +845,7 @@ static int snd_intel8x0m_ich_chip_init(struct intel8x0m *chip, int probing)
 {
 	unsigned long end_time;
 	unsigned int cnt, status, nstatus;
-	
+
 	/* put logic to right state */
 	/* first clear status bits */
 	status = ICH_RCS | ICH_MIINT | ICH_MOINT;
@@ -863,7 +863,7 @@ static int snd_intel8x0m_ich_chip_init(struct intel8x0m *chip, int probing)
 	do {
 		if ((igetdword(chip, ICHREG(GLOB_CNT)) & ICH_AC97WARM) == 0)
 			goto __ok;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while (time_after_eq(end_time, jiffies));
 	dev_err(chip->card->dev, "AC'97 warm reset still in progress? [0x%x]\n",
 		   igetdword(chip, ICHREG(GLOB_CNT)));
@@ -881,7 +881,7 @@ static int snd_intel8x0m_ich_chip_init(struct intel8x0m *chip, int probing)
 				(ICH_PCR | ICH_SCR | ICH_TCR);
 			if (status)
 				break;
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		} while (time_after_eq(end_time, jiffies));
 		if (! status) {
 			/* no codec is found */
@@ -897,7 +897,7 @@ static int snd_intel8x0m_ich_chip_init(struct intel8x0m *chip, int probing)
 		/* wait for other codecs ready status. */
 		end_time = jiffies + HZ / 4;
 		while (status != nstatus && time_after_eq(end_time, jiffies)) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 			status |= igetdword(chip, ICHREG(GLOB_STA)) & nstatus;
 		}
 
@@ -913,7 +913,7 @@ static int snd_intel8x0m_ich_chip_init(struct intel8x0m *chip, int probing)
 				(ICH_PCR | ICH_SCR | ICH_TCR);
 			if (status == nstatus)
 				break;
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		} while (time_after_eq(end_time, jiffies));
 	}
 
@@ -929,7 +929,7 @@ static int snd_intel8x0m_chip_init(struct intel8x0m *chip, int probing)
 {
 	unsigned int i;
 	int err;
-	
+
 	err = snd_intel8x0m_ich_chip_init(chip, probing);
 	if (err < 0)
 		return err;
@@ -1212,7 +1212,7 @@ static int __snd_intel8x0m_probe(struct pci_dev *pci,
 	err = snd_intel8x0m_pcm(chip);
 	if (err < 0)
 		return err;
-	
+
 	snd_intel8x0m_proc_init(chip);
 
 	sprintf(card->longname, "%s at irq %i",

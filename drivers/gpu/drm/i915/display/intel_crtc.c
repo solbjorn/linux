@@ -477,12 +477,12 @@ void intel_pipe_update_start(struct intel_crtc_state *new_crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(new_crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	const struct drm_display_mode *adjusted_mode = &new_crtc_state->hw.adjusted_mode;
-	long timeout = msecs_to_jiffies_timeout(1);
 	int scanline, min, max, vblank_start;
 	wait_queue_head_t *wq = drm_crtc_vblank_waitqueue(&crtc->base);
 	bool need_vlv_dsi_wa = (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) &&
 		intel_crtc_has_type(new_crtc_state, INTEL_OUTPUT_DSI);
 	DEFINE_WAIT(wait);
+	long timeout = 1;
 
 	intel_psr_lock(new_crtc_state);
 
@@ -546,7 +546,7 @@ void intel_pipe_update_start(struct intel_crtc_state *new_crtc_state)
 
 		local_irq_enable();
 
-		timeout = schedule_timeout(timeout);
+		timeout = schedule_msec_hrtimeout(timeout);
 
 		local_irq_disable();
 	}

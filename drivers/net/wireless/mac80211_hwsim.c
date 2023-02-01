@@ -4564,7 +4564,7 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 		hw->wiphy->regulatory_flags |= REGULATORY_CUSTOM_REG;
 		wiphy_apply_custom_regulatory(hw->wiphy, param->regd);
 		/* give the regulatory workqueue a chance to run */
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 	}
 
 	if (param->no_vif)

@@ -445,7 +445,7 @@ static void cpcap_adc_setup_calibrate(struct cpcap_adc *ddata,
 		return;
 
 	do {
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		error = regmap_read(ddata->reg, CPCAP_REG_ADCC2, &value);
 		if (error)
 			return;

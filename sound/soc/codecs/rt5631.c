@@ -1496,8 +1496,7 @@ static int rt5631_codec_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 					"change PLL in master mode\n");
 				snd_soc_component_write(component, RT5631_PLL_CTRL,
 					codec_master_pll_div[i].reg_val);
-				schedule_timeout_uninterruptible(
-					msecs_to_jiffies(20));
+				schedule_msec_hrtimeout_uninterruptible(20);
 				snd_soc_component_update_bits(component,
 					RT5631_GLOBAL_CLK_CTRL,
 					RT5631_SYSCLK_SOUR_SEL_MASK |
@@ -1515,8 +1514,7 @@ static int rt5631_codec_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 					"change PLL in slave mode\n");
 				snd_soc_component_write(component, RT5631_PLL_CTRL,
 					codec_slave_pll_div[i].reg_val);
-				schedule_timeout_uninterruptible(
-					msecs_to_jiffies(20));
+				schedule_msec_hrtimeout_uninterruptible(20);
 				snd_soc_component_update_bits(component,
 					RT5631_GLOBAL_CLK_CTRL,
 					RT5631_SYSCLK_SOUR_SEL_MASK |

@@ -5443,7 +5443,7 @@ static int nv_mgmt_get_version(struct net_device *dev)
 			ready = 1;
 			break;
 		}
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 
 	if (!ready || (data_ready2 & NVREG_XMITCTL_DATA_ERROR))

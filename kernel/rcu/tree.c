@@ -4047,7 +4047,7 @@ retry:
 		}
 		raw_spin_unlock_irqrestore(&rcu_state.barrier_lock, flags);
 		if (smp_call_function_single(cpu, rcu_barrier_handler, (void *)cpu, 1)) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 			goto retry;
 		}
 		WARN_ON_ONCE(READ_ONCE(rdp->barrier_seq_snap) != gseq);

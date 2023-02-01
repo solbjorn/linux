@@ -1165,7 +1165,7 @@ static int isotp_release(struct socket *sock)
 	spin_lock(&isotp_notifier_lock);
 	while (isotp_busy_notifier == so) {
 		spin_unlock(&isotp_notifier_lock);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		spin_lock(&isotp_notifier_lock);
 	}
 	list_del(&so->notifier);

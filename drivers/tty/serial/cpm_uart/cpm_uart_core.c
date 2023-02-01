@@ -452,7 +452,7 @@ static void cpm_uart_shutdown(struct uart_port *port)
 		/* Wait for all the BDs marked sent */
 		while(!cpm_uart_tx_empty(port)) {
 			set_current_state(TASK_UNINTERRUPTIBLE);
-			schedule_timeout(2);
+			schedule_msec_hrtimeout(2);
 		}
 
 		if (pinfo->wait_closing)

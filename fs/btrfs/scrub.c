@@ -2201,12 +2201,8 @@ static void scrub_throttle(struct scrub_ctx *sctx)
 		delta = 0;
 	}
 
-	if (delta) {
-		long timeout;
-
-		timeout = div_u64(delta * HZ, 1000);
-		schedule_timeout_interruptible(timeout);
-	}
+	if (delta)
+		schedule_msec_hrtimeout_interruptible(delta);
 
 	/* Next call will start the deadline period */
 	sctx->throttle_deadline = 0;

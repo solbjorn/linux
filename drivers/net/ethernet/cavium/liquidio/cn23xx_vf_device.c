@@ -438,7 +438,7 @@ int cn23xx_octeon_pfvf_handshake(struct octeon_device *oct)
 	atomic_set(&status, 0);
 
 	do {
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while ((!atomic_read(&status)) && (count++ < 100000));
 
 	ret = atomic_read(&status);

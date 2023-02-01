@@ -101,7 +101,7 @@ static int hdq_wait_for_flag(struct hdq_data *hdq_data, u32 offset,
 		/* wait for the flag clear */
 		while (((*status = hdq_reg_in(hdq_data, offset)) & flag)
 			&& time_before(jiffies, timeout)) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 		if (*status & flag)
 			ret = -ETIMEDOUT;
@@ -109,7 +109,7 @@ static int hdq_wait_for_flag(struct hdq_data *hdq_data, u32 offset,
 		/* wait for the flag set */
 		while (!((*status = hdq_reg_in(hdq_data, offset)) & flag)
 			&& time_before(jiffies, timeout)) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 		if (!(*status & flag))
 			ret = -ETIMEDOUT;

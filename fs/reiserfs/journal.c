@@ -2999,7 +2999,7 @@ static void let_transaction_grow(struct super_block *sb, unsigned int trans_id)
 		int depth;
 
 		depth = reiserfs_write_unlock_nested(sb);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		reiserfs_write_lock_nested(sb, depth);
 
 		journal->j_current_jl->j_state |= LIST_COMMIT_PENDING;

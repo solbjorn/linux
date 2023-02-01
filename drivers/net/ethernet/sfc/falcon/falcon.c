@@ -544,7 +544,7 @@ static int falcon_spi_wait(struct ef4_nic *efx)
 				  "timed out waiting for SPI\n");
 			return -ETIMEDOUT;
 		}
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 }
 
@@ -683,7 +683,7 @@ falcon_spi_wait_write(struct ef4_nic *efx, const struct falcon_spi_device *spi)
 				  spi->device_id, status);
 			return -ETIMEDOUT;
 		}
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 }
 
@@ -2024,7 +2024,7 @@ static int __falcon_reset_hw(struct ef4_nic *efx, enum reset_type method)
 	ef4_writeo(efx, &glb_ctl_reg_ker, FR_AB_GLB_CTL);
 
 	netif_dbg(efx, hw, efx->net_dev, "waiting for hardware reset\n");
-	schedule_timeout_uninterruptible(HZ / 20);
+	schedule_msec_hrtimeout_uninterruptible(50);
 
 	/* Restore PCI configuration if needed */
 	if (method == RESET_TYPE_WORLD) {
@@ -2132,7 +2132,7 @@ static int falcon_reset_sram(struct ef4_nic *efx)
 			  "waiting for SRAM reset (attempt %d)...\n", count);
 
 		/* SRAM reset is slow; expect around 16ms */
-		schedule_timeout_uninterruptible(HZ / 50);
+		schedule_msec_hrtimeout_uninterruptible(20);
 
 		/* Check for reset complete */
 		ef4_reado(efx, &srm_cfg_reg_ker, FR_AZ_SRM_CFG);

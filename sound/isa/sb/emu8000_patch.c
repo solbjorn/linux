@@ -98,7 +98,7 @@ static void
 snd_emu8000_write_wait(struct snd_emu8000 *emu)
 {
 	while ((EMU8000_SMALW_READ(emu) & 0x80000000) != 0) {
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 		if (signal_pending(current))
 			break;
 	}

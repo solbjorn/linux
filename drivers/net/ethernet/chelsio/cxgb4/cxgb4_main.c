@@ -1780,7 +1780,7 @@ static void process_tid_release_list(struct work_struct *work)
 
 		while (!(skb = alloc_skb(sizeof(struct cpl_tid_release),
 					 GFP_KERNEL)))
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 
 		mk_tid_release(skb, chan, p - adap->tids.tid_tab);
 		t4_ofld_send(adap, skb);
@@ -2418,7 +2418,7 @@ static void drain_db_fifo(struct adapter *adap, int usecs)
 		if (lp_count == 0 && hp_count == 0)
 			break;
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(usecs_to_jiffies(usecs));
+		schedule_usec_hrtimeout(usecs);
 	} while (1);
 }
 

@@ -1273,7 +1273,7 @@ int lio_wait_for_clean_oq(struct octeon_device *oct)
 		}
 
 		if (pending_pkts > 0)
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 
 	} while (retry-- && pending_pkts);
 

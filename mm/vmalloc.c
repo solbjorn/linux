@@ -3089,7 +3089,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		ret = vmap_pages_range(addr, addr + size, prot, area->pages,
 			page_shift);
 		if (nofail && (ret < 0))
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 	} while (nofail && (ret < 0));
 
 	if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
@@ -3193,7 +3193,7 @@ again:
 			"vmalloc error: size %lu, vm_struct allocation failed%s",
 			real_size, (nofail) ? ". Retrying." : "");
 		if (nofail) {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 			goto again;
 		}
 		goto fail;

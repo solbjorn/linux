@@ -36,7 +36,7 @@ unsigned int ucb1400_adc_read(struct snd_ac97 *ac97, u16 adc_channel,
 
 	while (!((val = ucb1400_reg_read(ac97, UCB_ADC_DATA))
 				& UCB_ADC_DAT_VALID))
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 	return val & UCB_ADC_DAT_MASK;
 }
