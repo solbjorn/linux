@@ -319,6 +319,7 @@ struct clock_event_device;
 extern void hrtimer_interrupt(struct clock_event_device *dev);
 
 extern unsigned int hrtimer_resolution;
+extern int hrtimeout_min_us;
 
 #else
 

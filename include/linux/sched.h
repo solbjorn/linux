@@ -295,39 +295,13 @@ enum {
 
 extern void scheduler_tick(bool user_tick);
 
-#define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
+#define	MAX_SCHEDULE_TIMEOUT		LONG_MAX
+
 extern long schedule_timeout(long timeout);
 extern long schedule_timeout_interruptible(long timeout);
 extern long schedule_timeout_killable(long timeout);
 extern long schedule_timeout_uninterruptible(long timeout);
 extern long schedule_timeout_idle(long timeout);
-
-#ifdef CONFIG_HIGH_RES_TIMERS
-extern long schedule_msec_hrtimeout(long timeout);
-extern long schedule_min_hrtimeout(void);
-extern long schedule_msec_hrtimeout_interruptible(long timeout);
-extern long schedule_msec_hrtimeout_uninterruptible(long timeout);
-#else
-static inline long schedule_msec_hrtimeout(long timeout)
-{
-	return schedule_timeout(msecs_to_jiffies(timeout));
-}
-
-static inline long schedule_min_hrtimeout(void)
-{
-	return schedule_timeout(1);
-}
-
-static inline long schedule_msec_hrtimeout_interruptible(long timeout)
-{
-	return schedule_timeout_interruptible(msecs_to_jiffies(timeout));
-}
-
-static inline long schedule_msec_hrtimeout_uninterruptible(long timeout)
-{
-	return schedule_timeout_uninterruptible(msecs_to_jiffies(timeout));
-}
-#endif
 
 asmlinkage void schedule(void);
 extern void schedule_preempt_disabled(void);
@@ -340,6 +314,99 @@ extern int __must_check io_schedule_prepare(void);
 extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
+
+#ifdef CONFIG_HIGH_RES_TIMERS
+long __schedule_usec_hrtimeout(long timeout);
+long __schedule_msec_hrtimeout(long timeout);
+long schedule_min_hrtimeout(void);
+long __schedule_msec_hrtimeout_interruptible(long timeout);
+long schedule_min_hrtimeout_interruptible(void);
+long __schedule_msec_hrtimeout_uninterruptible(long timeout);
+long schedule_min_hrtimeout_uninterruptible(void);
+long __io_schedule_msec_hrtimeout(long timeout);
+long io_schedule_min_hrtimeout(void);
+
+#define MAX_HRTIMEOUT			4L
+
+#define DEFINE_HRTIMEOUT(name, tick, pfx)		\
+static inline long name(long timeout)			\
+{							\
+	if (__builtin_constant_p(timeout)) {		\
+		long j;					\
+							\
+		j = pfx##s_to_jiffies(timeout);		\
+		if (j > MAX_HRTIMEOUT) {		\
+			j = tick(j);			\
+			return jiffies_to_##pfx##s(j);	\
+		}					\
+	}						\
+							\
+	return __##name(timeout);			\
+}
+
+DEFINE_HRTIMEOUT(schedule_usec_hrtimeout, schedule_timeout, usec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout, schedule_timeout, msec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout_interruptible,
+		 schedule_timeout_interruptible, msec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout_uninterruptible,
+		 schedule_timeout_uninterruptible, msec);
+DEFINE_HRTIMEOUT(io_schedule_msec_hrtimeout, io_schedule_timeout, msec);
+#else
+static inline long schedule_usec_hrtimeout(long timeout)
+{
+	timeout = usecs_to_jiffies(timeout);
+	timeout = schedule_timeout(timeout);
+	return jiffies_to_usecs(timeout);
+}
+
+static inline long schedule_msec_hrtimeout(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout(void)
+{
+	return jiffies_to_usecs(schedule_timeout(1));
+}
+
+static inline long schedule_msec_hrtimeout_interruptible(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout_interruptible(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout_interruptible(void)
+{
+	return jiffies_to_usecs(schedule_timeout_interruptible(1));
+}
+
+static inline long schedule_msec_hrtimeout_uninterruptible(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout_uninterruptible(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout_uninterruptible(void)
+{
+	return jiffies_to_usecs(schedule_timeout_uninterruptible(1));
+}
+
+static inline long io_schedule_msec_hrtimeout(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = io_schedule_timeout(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long io_schedule_min_hrtimeout(void)
+{
+	return jiffies_to_usecs(io_schedule_timeout(1));
+}
+#endif /* CONFIG_HIGH_RES_TIMERS */
 
 /**
  * struct prev_cputime - snapshot of system and user cputime

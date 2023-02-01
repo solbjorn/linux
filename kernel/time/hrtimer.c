@@ -2387,111 +2387,132 @@ int __sched schedule_hrtimeout(ktime_t *expires,
 EXPORT_SYMBOL_GPL(schedule_hrtimeout);
 
 /*
- * As per schedule_hrtimeout but taskes a millisecond value and returns how
- * many milliseconds are left.
+ * As per schedule_hrtimeout() but takes a microsecond value and returns how
+ * many microseconds are left.
  */
-long __sched schedule_msec_hrtimeout(long timeout)
+long __sched __schedule_usec_hrtimeout(long timeout)
 {
 	struct hrtimer_sleeper t;
-	int delta, jiffs;
 	ktime_t expires;
+	u64 slack;
+	int jiffs;
 
 	if (!timeout) {
 		__set_current_state(TASK_RUNNING);
 		return 0;
 	}
 
-	jiffs = msecs_to_jiffies(timeout);
+	jiffs = usecs_to_jiffies(timeout);
 	/*
 	 * If regular timer resolution is adequate or hrtimer resolution is not
 	 * (yet) better than Hz, as would occur during startup, use regular
 	 * timers.
 	 */
-	if (jiffs > 4 || hrtimer_resolution >= NSEC_PER_SEC / HZ || pm_freezing)
-		return schedule_timeout(jiffs);
+	if (jiffs > MAX_HRTIMEOUT || hrtimer_resolution >= NSEC_PER_SEC / HZ ||
+	    pm_freezing)
+		return jiffies_to_usecs(schedule_timeout(jiffs));
 
-	delta = (timeout % 1000) * NSEC_PER_MSEC;
-	expires = ktime_set(0, delta);
+	expires = ns_to_ktime(timeout * NSEC_PER_USEC);
+
+	if (!(dl_task(current) || rt_task(current)))
+		/* 1% ns = us * 1000 / 100 = us * 10 */
+		slack = timeout * 10;
+	else
+		slack = 0;
 
 	hrtimer_init_sleeper_on_stack(&t, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	hrtimer_set_expires_range_ns(&t.timer, expires, delta);
-
+	hrtimer_set_expires_range_ns(&t.timer, expires, slack);
 	hrtimer_sleeper_start_expires(&t, HRTIMER_MODE_REL);
 
 	if (likely(t.task))
 		schedule();
 
 	hrtimer_cancel(&t.timer);
+	expires = hrtimer_expires_remaining(&t.timer);
 	destroy_hrtimer_on_stack(&t.timer);
+
+	if (ktime_after(expires, ns_to_ktime(0)))
+		timeout = ktime_to_us(expires);
+	else
+		timeout = 0;
 
 	__set_current_state(TASK_RUNNING);
 
-	expires = hrtimer_expires_remaining(&t.timer);
-	timeout = ktime_to_ms(expires);
-	return timeout < 0 ? 0 : timeout;
+	return timeout;
 }
+EXPORT_SYMBOL(__schedule_usec_hrtimeout);
 
-EXPORT_SYMBOL(schedule_msec_hrtimeout);
+#define __sched_ms(to) ({						\
+	long __to = __schedule_usec_hrtimeout((to) * USEC_PER_MSEC);	\
+									\
+	DIV_ROUND_CLOSEST(__to, USEC_PER_MSEC);				\
+})
 
-#define USECS_PER_SEC 1000000
-extern int hrtimer_granularity_us;
-
-static inline long schedule_usec_hrtimeout(long timeout)
+long __sched __schedule_msec_hrtimeout(long timeout)
 {
-	struct hrtimer_sleeper t;
-	ktime_t expires;
-	int delta;
-
-	if (!timeout) {
-		__set_current_state(TASK_RUNNING);
-		return 0;
-	}
-
-	if (hrtimer_resolution >= NSEC_PER_SEC / HZ)
-		return schedule_timeout(usecs_to_jiffies(timeout));
-
-	if (timeout < hrtimer_granularity_us)
-		timeout = hrtimer_granularity_us;
-	delta = (timeout % USECS_PER_SEC) * NSEC_PER_USEC;
-	expires = ktime_set(0, delta);
-
-	hrtimer_init_sleeper_on_stack(&t, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	hrtimer_set_expires_range_ns(&t.timer, expires, delta);
-
-	hrtimer_sleeper_start_expires(&t, HRTIMER_MODE_REL);
-
-	if (likely(t.task))
-		schedule();
-
-	hrtimer_cancel(&t.timer);
-	destroy_hrtimer_on_stack(&t.timer);
-
-	__set_current_state(TASK_RUNNING);
-
-	expires = hrtimer_expires_remaining(&t.timer);
-	timeout = ktime_to_us(expires);
-	return timeout < 0 ? 0 : timeout;
+	return __sched_ms(timeout);
 }
+EXPORT_SYMBOL(__schedule_msec_hrtimeout);
 
 int __read_mostly hrtimeout_min_us = 500;
+#define __sched_min()	__schedule_usec_hrtimeout(READ_ONCE(hrtimeout_min_us))
 
 long __sched schedule_min_hrtimeout(void)
 {
-	return usecs_to_jiffies(schedule_usec_hrtimeout(hrtimeout_min_us));
+	return __sched_min();
 }
-
 EXPORT_SYMBOL(schedule_min_hrtimeout);
 
-long __sched schedule_msec_hrtimeout_interruptible(long timeout)
+long __sched __schedule_msec_hrtimeout_interruptible(long timeout)
 {
 	__set_current_state(TASK_INTERRUPTIBLE);
-	return schedule_msec_hrtimeout(timeout);
+	return __sched_ms(timeout);
 }
-EXPORT_SYMBOL(schedule_msec_hrtimeout_interruptible);
+EXPORT_SYMBOL(__schedule_msec_hrtimeout_interruptible);
 
-long __sched schedule_msec_hrtimeout_uninterruptible(long timeout)
+long __sched schedule_min_hrtimeout_interruptible(void)
+{
+	__set_current_state(TASK_INTERRUPTIBLE);
+	return __sched_min();
+}
+EXPORT_SYMBOL(schedule_min_hrtimeout_interruptible);
+
+long __sched __schedule_msec_hrtimeout_uninterruptible(long timeout)
 {
 	__set_current_state(TASK_UNINTERRUPTIBLE);
-	return schedule_msec_hrtimeout(timeout);
+	return __sched_ms(timeout);
 }
-EXPORT_SYMBOL(schedule_msec_hrtimeout_uninterruptible);
+EXPORT_SYMBOL(__schedule_msec_hrtimeout_uninterruptible);
+
+long __sched schedule_min_hrtimeout_uninterruptible(void)
+{
+	__set_current_state(TASK_UNINTERRUPTIBLE);
+	return __sched_min();
+}
+EXPORT_SYMBOL(schedule_min_hrtimeout_uninterruptible);
+
+long __sched __io_schedule_msec_hrtimeout(long timeout)
+{
+	int token;
+	long ret;
+
+	token = io_schedule_prepare();
+	ret = __sched_ms(timeout);
+	io_schedule_finish(token);
+
+	return ret;
+}
+EXPORT_SYMBOL(io_schedule_msec_hrtimeout);
+
+long __sched io_schedule_min_hrtimeout(void)
+{
+	int token;
+	long ret;
+
+	token = io_schedule_prepare();
+	ret = __sched_min();
+	io_schedule_finish(token);
+
+	return ret;
+}
+EXPORT_SYMBOL(io_schedule_msec_hrtimeout);
