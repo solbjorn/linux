@@ -632,9 +632,13 @@ static inline struct kmem_cache *virt_to_cache(const void *obj)
 	struct slab *slab;
 
 	slab = virt_to_slab(obj);
+#ifdef CONFIG_BUG_ON_DATA_CORRUPTION
+	BUG_ON(!slab);
+#else
 	if (WARN_ONCE(!slab, "%s: Object is not a Slab page!\n",
 					__func__))
 		return NULL;
+#endif
 	return slab->slab_cache;
 }
 
@@ -667,10 +671,15 @@ static inline struct kmem_cache *cache_from_obj(struct kmem_cache *s, void *x)
 		return s;
 
 	cachep = virt_to_cache(x);
-	if (WARN(cachep && cachep != s,
-		  "%s: Wrong slab cache. %s but object is from %s\n",
-		  __func__, s->name, cachep->name))
+	if (cachep && cachep != s) {
+#ifdef CONFIG_BUG_ON_DATA_CORRUPTION
+		BUG();
+#else
+		WARN(1, "%s: Wrong slab cache. %s but object is from %s\n",
+			__func__, s->name, cachep->name);
 		print_tracking(cachep, x);
+#endif
+	}
 	return cachep;
 }
 
@@ -701,7 +710,7 @@ static inline size_t slab_ksize(const struct kmem_cache *s)
 	 * back there or track user information then we can
 	 * only use the space before that information.
 	 */
-	if (s->flags & (SLAB_TYPESAFE_BY_RCU | SLAB_STORE_USER))
+	if ((s->flags & (SLAB_TYPESAFE_BY_RCU | SLAB_STORE_USER)) || IS_ENABLED(CONFIG_SLAB_CANARY))
 		return s->inuse;
 	/*
 	 * Else we can use all the padding etc for the allocation
@@ -761,6 +770,8 @@ static inline void slab_post_alloc_hook(struct kmem_cache *s,
 		p[i] = kasan_slab_alloc(s, p[i], flags, init);
 		if (p[i] && init && !kasan_has_integrated_init())
 			memset(p[i], 0, zero_size);
+		if (p[i] && init && s->ctor)
+			s->ctor(p[i]);
 		kmemleak_alloc_recursive(p[i], s->object_size, 1,
 					 s->flags, flags);
 		kmsan_slab_alloc(s, p[i], flags);
@@ -845,8 +856,10 @@ static inline bool slab_want_init_on_alloc(gfp_t flags, struct kmem_cache *c)
 {
 	if (static_branch_maybe(CONFIG_INIT_ON_ALLOC_DEFAULT_ON,
 				&init_on_alloc)) {
+#ifndef CONFIG_SLUB
 		if (c->ctor)
 			return false;
+#endif
 		if (c->flags & (SLAB_TYPESAFE_BY_RCU | SLAB_POISON))
 			return flags & __GFP_ZERO;
 		return true;
@@ -857,9 +870,15 @@ static inline bool slab_want_init_on_alloc(gfp_t flags, struct kmem_cache *c)
 static inline bool slab_want_init_on_free(struct kmem_cache *c)
 {
 	if (static_branch_maybe(CONFIG_INIT_ON_FREE_DEFAULT_ON,
-				&init_on_free))
-		return !(c->ctor ||
-			 (c->flags & (SLAB_TYPESAFE_BY_RCU | SLAB_POISON)));
+				&init_on_free)) {
+#ifndef CONFIG_SLUB
+		if (c->ctor)
+			return false;
+#endif
+		if (c->flags & (SLAB_TYPESAFE_BY_RCU | SLAB_POISON))
+			return false;
+		return true;
+	}
 	return false;
 }
 

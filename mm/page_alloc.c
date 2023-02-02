@@ -218,6 +218,15 @@ EXPORT_PER_CPU_SYMBOL(_numa_mem_);
 
 static DEFINE_MUTEX(pcpu_drain_mutex);
 
+bool __meminitdata extra_latent_entropy;
+
+static int __init setup_extra_latent_entropy(char *str)
+{
+	extra_latent_entropy = true;
+	return 0;
+}
+early_param("extra_latent_entropy", setup_extra_latent_entropy);
+
 #ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
 volatile unsigned long latent_entropy __latent_entropy;
 EXPORT_SYMBOL(latent_entropy);
@@ -803,12 +812,17 @@ void prep_compound_page(struct page *page, unsigned int order)
 	prep_compound_head(page, order);
 }
 
-void destroy_large_folio(struct folio *folio)
+compound_page_dtor *get_compound_page_dtor(struct folio *folio)
 {
 	enum compound_dtor_id dtor = folio_page(folio, 1)->compound_dtor;
 
 	VM_BUG_ON_FOLIO(dtor >= NR_COMPOUND_DTORS, folio);
-	compound_page_dtors[dtor](&folio->page);
+	return compound_page_dtors[dtor];
+}
+
+void destroy_large_folio(struct folio *folio)
+{
+	(*get_compound_page_dtor(folio))(&folio->page);
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
@@ -1720,6 +1734,25 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	__count_vm_events(PGFREE, 1 << order);
 }
 
+static void __init __gather_extra_latent_entropy(struct page *page,
+						 unsigned int nr_pages)
+{
+	if (extra_latent_entropy && !PageHighMem(page) && page_to_pfn(page) < 0x100000) {
+		unsigned long hash = 0;
+		size_t index, end = PAGE_SIZE * nr_pages / sizeof hash;
+		const unsigned long *data = lowmem_page_address(page);
+
+		for (index = 0; index < end; index++)
+			hash ^= hash + data[index];
+#ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
+		latent_entropy ^= hash;
+		add_device_randomness((const void *)&latent_entropy, sizeof(latent_entropy));
+#else
+		add_device_randomness((const void *)&hash, sizeof(hash));
+#endif
+	}
+}
+
 void __free_pages_core(struct page *page, unsigned int order)
 {
 	unsigned int nr_pages = 1 << order;
@@ -1739,7 +1772,6 @@ void __free_pages_core(struct page *page, unsigned int order)
 	}
 	__ClearPageReserved(p);
 	set_page_count(p, 0);
-
 	atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
 
 	/*
@@ -1810,6 +1842,7 @@ void __init memblock_free_pages(struct page *page, unsigned long pfn,
 		/* KMSAN will take care of these pages. */
 		return;
 	}
+	__gather_extra_latent_entropy(page, 1 << order);
 	__free_pages_core(page, order);
 }
 
@@ -1898,6 +1931,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	/* Free a large naturally-aligned chunk if possible */
 	if (nr_pages == pageblock_nr_pages && pageblock_aligned(pfn)) {
 		set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+		__gather_extra_latent_entropy(page, 1 << pageblock_order);
 		__free_pages_core(page, pageblock_order);
 		return;
 	}
@@ -1905,6 +1939,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	for (i = 0; i < nr_pages; i++, page++, pfn++) {
 		if (pageblock_aligned(pfn))
 			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+		__gather_extra_latent_entropy(page, 1);
 		__free_pages_core(page, 0);
 	}
 }
@@ -2483,6 +2518,12 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	 * allocations and the page unpoisoning code will complain.
 	 */
 	kernel_unpoison_pages(page, 1 << order);
+
+	if (IS_ENABLED(CONFIG_PAGE_SANITIZE_VERIFY) && want_init_on_free()) {
+		int i;
+		for (i = 0; i < (1 << order); i++)
+			verify_zero_highpage(page + i);
+	}
 
 	/*
 	 * As memory initialization might be integrated into KASAN,
