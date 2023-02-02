@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_ENTRY_COMMON_H
 #define _ASM_X86_ENTRY_COMMON_H
 
+#include <linux/random.h>
 #include <linux/randomize_kstack.h>
 #include <linux/user-return-notifier.h>
 
@@ -85,7 +86,7 @@ static inline void arch_exit_to_user_mode_prepare(struct pt_regs *regs,
 	 * Therefore, final stack offset entropy will be 5 (x86_64) or
 	 * 6 (ia32) bits.
 	 */
-	choose_random_kstack_offset(rdtsc() & 0xFF);
+	choose_random_kstack_offset(get_random_u8());
 }
 #define arch_exit_to_user_mode_prepare arch_exit_to_user_mode_prepare
 
