@@ -945,7 +945,7 @@ static int xdbc_scrub_function(void *ptr)
 		}
 
 		raw_spin_unlock_irqrestore(&xdbc.lock, flags);
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 	}
 
 	xdbc_unregister_console();

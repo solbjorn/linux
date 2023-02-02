@@ -74,7 +74,7 @@ void verbose_torout_sleep(void)
 	if (verbose_sleep_frequency > 0 &&
 	    verbose_sleep_duration > 0 &&
 	    !(atomic_inc_return(&verbose_sleep_counter) % verbose_sleep_frequency))
-		schedule_timeout_uninterruptible(verbose_sleep_duration);
+		schedule_msec_hrtimeout_uninterruptible(verbose_sleep_duration);
 }
 EXPORT_SYMBOL_GPL(verbose_torout_sleep);
 
@@ -733,7 +733,7 @@ bool stutter_wait(const char *title)
 			ret = true;
 		}
 		if (spt == 1) {
-			schedule_timeout_interruptible(1);
+			schedule_min_hrtimeout_interruptible();
 		} else if (spt == 2) {
 			while (READ_ONCE(stutter_pause_test)) {
 				if (!(i++ & 0xffff))
@@ -860,7 +860,7 @@ bool torture_cleanup_begin(void)
 	if (READ_ONCE(fullstop) == FULLSTOP_SHUTDOWN) {
 		pr_warn("Concurrent rmmod and shutdown illegal!\n");
 		mutex_unlock(&fullstop_mutex);
-		schedule_timeout_uninterruptible(10);
+		schedule_msec_hrtimeout_uninterruptible(10);
 		return true;
 	}
 	WRITE_ONCE(fullstop, FULLSTOP_RMMOD);
@@ -915,7 +915,7 @@ void torture_kthread_stopping(char *title)
 	VERBOSE_TOROUT_STRING(buf);
 	while (!kthread_should_stop()) {
 		torture_shutdown_absorb(title);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 }
 EXPORT_SYMBOL_GPL(torture_kthread_stopping);

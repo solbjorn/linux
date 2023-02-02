@@ -261,7 +261,7 @@ int lio_wait_for_instr_fetch(struct octeon_device *oct)
 		if (instr_cnt == 0)
 			break;
 
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 	} while (retry-- && instr_cnt);
 

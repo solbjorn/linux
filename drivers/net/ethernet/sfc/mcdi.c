@@ -380,7 +380,7 @@ static int efx_mcdi_poll(struct efx_nic *efx)
 			--spins;
 			udelay(1);
 		} else {
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 		time = jiffies;

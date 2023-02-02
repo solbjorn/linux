@@ -528,7 +528,7 @@ abituguru_detect_bank1_sensor_type(struct abituguru_data *data,
 	 * and raise a voltage alarm
 	 */
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(HZ/50);
+	schedule_msec_hrtimeout(20);
 	/* Check for alarm and check the alarm is a volt low alarm. */
 	if (abituguru_read(data, ABIT_UGURU_ALARM_BANK, 0, buf, 3,
 			ABIT_UGURU_MAX_RETRIES) != 3)
@@ -565,7 +565,7 @@ abituguru_detect_bank1_sensor_type(struct abituguru_data *data,
 	 * and raise a temp alarm
 	 */
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(HZ/20);
+	schedule_msec_hrtimeout(50);
 	/* Check for alarm and check the alarm is a temp high alarm. */
 	if (abituguru_read(data, ABIT_UGURU_ALARM_BANK, 0, buf, 3,
 			ABIT_UGURU_MAX_RETRIES) != 3)

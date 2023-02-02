@@ -4439,7 +4439,7 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	 */
 	if (!mutex_trylock(&oom_lock)) {
 		*did_some_progress = 1;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		return NULL;
 	}
 
@@ -5013,7 +5013,7 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 	 * here rather than calling cond_resched().
 	 */
 	if (current->flags & PF_WQ_WORKER)
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	else
 		cond_resched();
 	return ret;

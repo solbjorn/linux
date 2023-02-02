@@ -127,6 +127,8 @@ struct task_group;
 					 __TASK_TRACED | EXIT_DEAD | EXIT_ZOMBIE | \
 					 TASK_PARKED)
 
+#define IPC_CLASS_UNCLASSIFIED		0
+
 #define task_is_running(task)		(READ_ONCE((task)->__state) == TASK_RUNNING)
 
 #define task_is_traced(task)		((READ_ONCE(task->jobctl) & JOBCTL_TRACED) != 0)
@@ -291,7 +293,7 @@ enum {
 	TASK_COMM_LEN = 16,
 };
 
-extern void scheduler_tick(void);
+extern void scheduler_tick(bool user_tick);
 
 #define	MAX_SCHEDULE_TIMEOUT		LONG_MAX
 
@@ -300,6 +302,7 @@ extern long schedule_timeout_interruptible(long timeout);
 extern long schedule_timeout_killable(long timeout);
 extern long schedule_timeout_uninterruptible(long timeout);
 extern long schedule_timeout_idle(long timeout);
+
 asmlinkage void schedule(void);
 extern void schedule_preempt_disabled(void);
 asmlinkage void preempt_schedule_irq(void);
@@ -311,6 +314,99 @@ extern int __must_check io_schedule_prepare(void);
 extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
+
+#ifdef CONFIG_HIGH_RES_TIMERS
+long __schedule_usec_hrtimeout(long timeout);
+long __schedule_msec_hrtimeout(long timeout);
+long schedule_min_hrtimeout(void);
+long __schedule_msec_hrtimeout_interruptible(long timeout);
+long schedule_min_hrtimeout_interruptible(void);
+long __schedule_msec_hrtimeout_uninterruptible(long timeout);
+long schedule_min_hrtimeout_uninterruptible(void);
+long __io_schedule_msec_hrtimeout(long timeout);
+long io_schedule_min_hrtimeout(void);
+
+#define MAX_HRTIMEOUT			4L
+
+#define DEFINE_HRTIMEOUT(name, tick, pfx)		\
+static inline long name(long timeout)			\
+{							\
+	if (__builtin_constant_p(timeout)) {		\
+		long j;					\
+							\
+		j = pfx##s_to_jiffies(timeout);		\
+		if (j > MAX_HRTIMEOUT) {		\
+			j = tick(j);			\
+			return jiffies_to_##pfx##s(j);	\
+		}					\
+	}						\
+							\
+	return __##name(timeout);			\
+}
+
+DEFINE_HRTIMEOUT(schedule_usec_hrtimeout, schedule_timeout, usec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout, schedule_timeout, msec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout_interruptible,
+		 schedule_timeout_interruptible, msec);
+DEFINE_HRTIMEOUT(schedule_msec_hrtimeout_uninterruptible,
+		 schedule_timeout_uninterruptible, msec);
+DEFINE_HRTIMEOUT(io_schedule_msec_hrtimeout, io_schedule_timeout, msec);
+#else
+static inline long schedule_usec_hrtimeout(long timeout)
+{
+	timeout = usecs_to_jiffies(timeout);
+	timeout = schedule_timeout(timeout);
+	return jiffies_to_usecs(timeout);
+}
+
+static inline long schedule_msec_hrtimeout(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout(void)
+{
+	return jiffies_to_usecs(schedule_timeout(1));
+}
+
+static inline long schedule_msec_hrtimeout_interruptible(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout_interruptible(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout_interruptible(void)
+{
+	return jiffies_to_usecs(schedule_timeout_interruptible(1));
+}
+
+static inline long schedule_msec_hrtimeout_uninterruptible(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = schedule_timeout_uninterruptible(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long schedule_min_hrtimeout_uninterruptible(void)
+{
+	return jiffies_to_usecs(schedule_timeout_uninterruptible(1));
+}
+
+static inline long io_schedule_msec_hrtimeout(long timeout)
+{
+	timeout = msecs_to_jiffies(timeout);
+	timeout = io_schedule_timeout(timeout);
+	return jiffies_to_msecs(timeout);
+}
+
+static inline long io_schedule_min_hrtimeout(void)
+{
+	return jiffies_to_usecs(io_schedule_timeout(1));
+}
+#endif /* CONFIG_HIGH_RES_TIMERS */
 
 /**
  * struct prev_cputime - snapshot of system and user cputime
@@ -548,6 +644,7 @@ struct sched_entity {
 	/* For load-balancing: */
 	struct load_weight		load;
 	struct rb_node			run_node;
+	struct rb_node			latency_node;
 	struct list_head		group_node;
 	unsigned int			on_rq;
 
@@ -555,6 +652,11 @@ struct sched_entity {
 	u64				sum_exec_runtime;
 	u64				vruntime;
 	u64				prev_sum_exec_runtime;
+#ifdef CONFIG_SCHED_BORE
+	u64				prev_burst_time;
+	u64				burst_time;
+	u8				burst_score;
+#endif // CONFIG_SCHED_BORE
 
 	u64				nr_migrations;
 
@@ -568,6 +670,8 @@ struct sched_entity {
 	/* cached value of my_q->h_nr_running */
 	unsigned long			runnable_weight;
 #endif
+	/* preemption offset in ns */
+	long				latency_offset;
 
 #ifdef CONFIG_SMP
 	/*
@@ -784,6 +888,7 @@ struct task_struct {
 	int				static_prio;
 	int				normal_prio;
 	unsigned int			rt_priority;
+	int				latency_prio;
 
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
@@ -1520,6 +1625,24 @@ struct task_struct {
 	 * none of these are justified.
 	 */
 	union rv_task_monitor		rv[RV_PER_TASK_MONITORS];
+#endif
+
+#ifdef CONFIG_IPC_CLASSES
+	/*
+	 * A hardware-defined classification of task based on the number
+	 * of instructions per cycle.
+	 */
+	unsigned int			ipcc : 9;
+	/*
+	 * A candidate classification that arch-specific implementations
+	 * qualify for correctness.
+	 */
+	unsigned int			ipcc_tmp : 9;
+	/*
+	 * Counter to filter out transient the candidate classification
+	 * of a task
+	 */
+	unsigned int			ipcc_cntr : 14;
 #endif
 
 	/*
@@ -2419,5 +2542,7 @@ static inline void sched_core_fork(struct task_struct *p) { }
 #endif
 
 extern void sched_set_stop_task(int cpu, struct task_struct *stop);
+
+extern bool sched_smt_siblings_idle(int cpu);
 
 #endif

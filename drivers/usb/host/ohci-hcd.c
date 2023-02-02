@@ -375,7 +375,7 @@ sanitize:
 			goto sanitize;
 		}
 		spin_unlock_irqrestore (&ohci->lock, flags);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		goto rescan;
 	case ED_IDLE:		/* fully unlinked */
 		if (list_empty (&ed->td_list)) {
@@ -713,7 +713,7 @@ int ohci_setup(struct usb_hcd *hcd)
 	struct ohci_hcd		*ohci = hcd_to_ohci(hcd);
 
 	ohci_hcd_init(ohci);
-	
+
 	return ohci_init(ohci);
 }
 EXPORT_SYMBOL_GPL(ohci_setup);
@@ -1364,4 +1364,3 @@ static void __exit ohci_hcd_mod_exit(void)
 	clear_bit(USB_OHCI_LOADED, &usb_hcds_loaded);
 }
 module_exit(ohci_hcd_mod_exit);
-

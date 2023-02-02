@@ -250,12 +250,12 @@ static inline void memalloc_retry_wait(gfp_t gfp_flags)
 	if (gfpflags_allow_blocking(gfp_flags) &&
 	    !(gfp_flags & __GFP_NORETRY))
 		/* Probably waited already, no need for much more */
-		io_schedule_timeout(1);
+		io_schedule_min_hrtimeout();
 	else
 		/* Probably didn't wait, and has now released a lock,
 		 * so now is a good time to wait
 		 */
-		io_schedule_timeout(HZ/50);
+		io_schedule_msec_hrtimeout(20);
 }
 
 /**

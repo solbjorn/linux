@@ -3505,7 +3505,7 @@ static int create_server4(struct c4iw_dev *dev, struct c4iw_listen_ep *ep)
 					break;
 				}
 				set_current_state(TASK_UNINTERRUPTIBLE);
-				schedule_timeout(usecs_to_jiffies(100));
+				schedule_usec_hrtimeout(100);
 			}
 		} while (err == -EBUSY);
 	} else {

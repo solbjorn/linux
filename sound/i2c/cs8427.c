@@ -292,7 +292,7 @@ int snd_cs8427_create(struct snd_i2c_bus *bus,
 		printk(KERN_DEBUG "reg[0x%x] = 0x%x\n", xx+1, buf[xx]);
 	}
 #endif
-	
+
 	if (r_cs8427)
 		*r_cs8427 = device;
 	return 0;
@@ -338,7 +338,7 @@ static void snd_cs8427_reset(struct snd_i2c_device *cs8427)
 		snd_i2c_unlock(cs8427->bus);
 		if (!(data & CS8427_UNLOCK))
 			break;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 	snd_i2c_lock(cs8427->bus);
 	chip->regmap[CS8427_REG_CLOCKSOURCE] &= ~CS8427_RXDMASK;
@@ -421,7 +421,7 @@ static int snd_cs8427_spdif_get(struct snd_kcontrol *kcontrol,
 {
 	struct snd_i2c_device *device = snd_kcontrol_chip(kcontrol);
 	struct cs8427 *chip = device->private_data;
-	
+
 	snd_i2c_lock(device->bus);
 	memcpy(ucontrol->value.iec958.status, chip->playback.def_status, 24);
 	snd_i2c_unlock(device->bus);

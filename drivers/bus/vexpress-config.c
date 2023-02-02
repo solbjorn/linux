@@ -191,7 +191,7 @@ static int vexpress_syscfg_exec(struct vexpress_syscfg_func *func,
 	do {
 		if (!irqs_disabled()) {
 			set_current_state(TASK_INTERRUPTIBLE);
-			schedule_timeout(usecs_to_jiffies(timeout));
+			schedule_usec_hrtimeout(timeout);
 			if (signal_pending(current))
 				return -EINTR;
 		} else {

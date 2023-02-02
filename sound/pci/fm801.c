@@ -139,7 +139,7 @@ MODULE_PARM_DESC(radio_nr, "Radio device numbers");
 #define FM801_GPIO_GS2		(1<<14)	/*    0 = other (S/PDIF, VOL) */
 #define FM801_GPIO_GS3		(1<<15)
 #define FM801_GPIO_GS(x)	(1<<(12+(x)))
-	
+
 /**
  * struct fm801 - describes FM801 chip
  * @dev:		device for this chio
@@ -947,7 +947,7 @@ static int snd_fm801_put_double(struct snd_kcontrol *kcontrol,
 	int mask = (kcontrol->private_value >> 16) & 0xff;
 	int invert = (kcontrol->private_value >> 24) & 0xff;
 	unsigned short val1, val2;
- 
+
 	val1 = ucontrol->value.integer.value[0] & mask;
 	val2 = ucontrol->value.integer.value[1] & mask;
 	if (invert) {
@@ -965,7 +965,7 @@ static int snd_fm801_info_mux(struct snd_kcontrol *kcontrol,
 	static const char * const texts[5] = {
 		"AC97 Primary", "FM", "I2S", "PCM", "AC97 Secondary"
 	};
- 
+
 	return snd_ctl_enum_info(uinfo, 1, 5, texts);
 }
 
@@ -974,7 +974,7 @@ static int snd_fm801_get_mux(struct snd_kcontrol *kcontrol,
 {
 	struct fm801 *chip = snd_kcontrol_chip(kcontrol);
         unsigned short val;
- 
+
 	val = fm801_readw(chip, REC_SRC) & 7;
 	if (val > 4)
 		val = 4;
@@ -987,7 +987,7 @@ static int snd_fm801_put_mux(struct snd_kcontrol *kcontrol,
 {
 	struct fm801 *chip = snd_kcontrol_chip(kcontrol);
         unsigned short val;
- 
+
 	val = ucontrol->value.enumerated.item[0];
 	if (val > 4)
                 return -EINVAL;
@@ -1087,7 +1087,7 @@ static int wait_for_codec(struct fm801 *chip, unsigned int codec_id,
 		if ((fm801_readw(chip, AC97_CMD) &
 		     (FM801_AC97_VALID | FM801_AC97_BUSY)) == FM801_AC97_VALID)
 			return 0;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while (time_after(timeout, jiffies));
 	return -EIO;
 }

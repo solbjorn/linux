@@ -5412,7 +5412,7 @@ rescan:
 	case QH_STATE_UNLINK_WAIT:
 idle_timeout:
 		spin_unlock_irqrestore(&fotg210->lock, flags);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		goto rescan;
 	case QH_STATE_IDLE:		/* fully unlinked */
 		if (qh->clearing_tt)

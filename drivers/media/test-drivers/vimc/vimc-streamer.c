@@ -166,7 +166,7 @@ static int vimc_streamer_thread(void *data)
 		}
 		//wait for 60hz
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(HZ / 60);
+		schedule_msec_hrtimeout(MSEC_PER_SEC / 60);
 	}
 
 	return 0;

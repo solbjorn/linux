@@ -19,6 +19,9 @@
  *
  *  Adaptive scheduling granularity, math enhancements by Peter Zijlstra
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
+ *
+ *  Burst-Oriented Response Enhancer (BORE) CPU Scheduler
+ *  Copyright (C) 2021 Masahito Suzuki <firelzrd@gmail.com>
  */
 #include <linux/energy_model.h>
 #include <linux/mmap_lock.h>
@@ -67,10 +70,16 @@
  * (to see the precise effective timeslice length of your workload,
  *  run vmstat and monitor the context-switches (cs) field)
  *
- * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
+ * (BORE default: 12.8ms constant, units: nanoseconds)
+ * (CFS  default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_latency			= 12800000ULL;
+static unsigned int normalized_sysctl_sched_latency	= 12800000ULL;
+#else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_latency			= 6000000ULL;
 static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
+#endif // CONFIG_SCHED_BORE
 
 /*
  * The initial- and re-scaling of tunables is configurable
@@ -81,25 +90,41 @@ static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
  *   SCHED_TUNABLESCALING_LOG - scaled logarithmical, *1+ilog(ncpus)
  *   SCHED_TUNABLESCALING_LINEAR - scaled linear, *ncpus
  *
- * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
+ * (BORE default SCHED_TUNABLESCALING_NONE = *1 constant)
+ * (CFS  default SCHED_TUNABLESCALING_LOG  = *(1+ilog(ncpus))
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_NONE;
+#else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
+#endif // CONFIG_SCHED_BORE
 
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (BORE default: 1.6 msec constant, units: nanoseconds)
+ * (CFS  default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_min_granularity			= 1600000ULL;
+static unsigned int normalized_sysctl_sched_min_granularity	= 1600000ULL;
+#else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_min_granularity			= 750000ULL;
 static unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
+#endif // CONFIG_SCHED_BORE
 
 /*
  * Minimal preemption granularity for CPU-bound SCHED_IDLE tasks.
  * Applies only when SCHED_IDLE tasks compete with normal tasks.
  *
- * (default: 0.75 msec)
+ * (BORE default: 1.6 msec constant)
+ * (CFS  default: 0.75 msec)
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_idle_min_granularity			= 1600000ULL;
+#else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_idle_min_granularity			= 750000ULL;
+#endif // CONFIG_SCHED_BORE
 
 /*
  * This value is kept at sysctl_sched_latency/sysctl_sched_min_granularity
@@ -119,12 +144,28 @@ unsigned int sysctl_sched_child_runs_first __read_mostly;
  * and reduces their over-scheduling. Synchronous workloads will still
  * have immediate wakeup/sleep latencies.
  *
- * (default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (BORE default: 4.8 msec constant, units: nanoseconds)
+ * (CFS  default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_wakeup_granularity			= 4800000UL;
+static unsigned int normalized_sysctl_sched_wakeup_granularity	= 4800000UL;
+#else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_wakeup_granularity			= 1000000UL;
 static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
+#endif // CONFIG_SCHED_BORE
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
+
+#ifdef CONFIG_SCHED_BORE
+unsigned int __read_mostly sched_bore                = 1;
+unsigned int __read_mostly sched_burst_penalty_scale = 1280;
+unsigned int __read_mostly sched_burst_granularity   = 12;
+unsigned int __read_mostly sched_burst_smoothness    = 1;
+static int three          = 3;
+static int sixty_four     = 64;
+static int maxval_12_bits = 4095;
+#endif // CONFIG_SCHED_BORE
 
 int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
@@ -142,8 +183,11 @@ __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
 #ifdef CONFIG_SMP
 /*
  * For asym packing, by default the lower numbered CPU has higher priority.
+ *
+ * When doing ASYM_PACKING at the "MC" or higher domains, architectures may
+ * want to check the idle state of the SMT siblngs of @cpu.
  */
-int __weak arch_asym_cpu_priority(int cpu)
+int __weak arch_asym_cpu_priority(int cpu, bool check_smt)
 {
 	return -cpu;
 }
@@ -185,6 +229,44 @@ static unsigned int sysctl_numa_balancing_promote_rate_limit = 65536;
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table sched_fair_sysctls[] = {
+#ifdef CONFIG_SCHED_BORE
+	{
+		.procname	= "sched_bore",
+		.data		= &sched_bore,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &three,
+	},
+	{
+		.procname	= "sched_burst_penalty_scale",
+		.data		= &sched_burst_penalty_scale,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &maxval_12_bits,
+	},
+	{
+		.procname	= "sched_burst_granularity",
+		.data		= &sched_burst_granularity,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &sixty_four,
+	},
+	{
+		.procname	= "sched_burst_smoothness",
+		.data		= &sched_burst_smoothness,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &three,
+	},
+#endif // CONFIG_SCHED_BORE
 	{
 		.procname       = "sched_child_runs_first",
 		.data           = &sysctl_sched_child_runs_first,
@@ -680,7 +762,76 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 
 	return __node_2_se(last);
 }
+#endif
 
+/**************************************************************
+ * Scheduling class tree data structure manipulation methods:
+ * for latency
+ */
+
+static inline bool latency_before(struct sched_entity *a,
+				struct sched_entity *b)
+{
+	return (s64)(a->vruntime + a->latency_offset - b->vruntime - b->latency_offset) < 0;
+}
+
+#define __latency_node_2_se(node) \
+	rb_entry((node), struct sched_entity, latency_node)
+
+static inline bool __latency_less(struct rb_node *a, const struct rb_node *b)
+{
+	return latency_before(__latency_node_2_se(a), __latency_node_2_se(b));
+}
+
+/*
+ * Enqueue an entity into the latency rb-tree:
+ */
+static void __enqueue_latency(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+{
+
+	/* Only latency sensitive entity can be added to the list */
+	if (se->latency_offset >= 0)
+		return;
+
+	if (!RB_EMPTY_NODE(&se->latency_node))
+		return;
+
+	/*
+	 * An execution time less than sysctl_sched_min_granularity means that
+	 * the entity has been preempted by a higher sched class or an entity
+	 * with higher latency constraint.
+	 * Put it back in the list so it gets a chance to run 1st during the
+	 * next slice.
+	 */
+	if (!(flags & ENQUEUE_WAKEUP)) {
+		u64 delta_exec = se->sum_exec_runtime - se->prev_sum_exec_runtime;
+
+		if (delta_exec >= sysctl_sched_min_granularity)
+			return;
+	}
+
+	rb_add_cached(&se->latency_node, &cfs_rq->latency_timeline, __latency_less);
+}
+
+static void __dequeue_latency(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	if (!RB_EMPTY_NODE(&se->latency_node)) {
+		rb_erase_cached(&se->latency_node, &cfs_rq->latency_timeline);
+		RB_CLEAR_NODE(&se->latency_node);
+	}
+}
+
+static struct sched_entity *__pick_first_latency(struct cfs_rq *cfs_rq)
+{
+	struct rb_node *left = rb_first_cached(&cfs_rq->latency_timeline);
+
+	if (!left)
+		return NULL;
+
+	return __latency_node_2_se(left);
+}
+
+#ifdef CONFIG_SCHED_DEBUG
 /**************************************************************
  * Scheduling class statistics methods:
  */
@@ -891,6 +1042,39 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq)
 }
 #endif /* CONFIG_SMP */
 
+#ifdef CONFIG_SCHED_BORE
+static inline void update_burst_score(struct sched_entity *se) {
+	u64 burst_time;
+	s32 bits;
+	u32 intgr, fdigs, dec10;
+
+	burst_time = max(se->burst_time, se->prev_burst_time);
+	bits = fls64(burst_time);
+	intgr = max((u32)bits, sched_burst_granularity) - sched_burst_granularity;
+	fdigs = max(bits - 1, (s32)sched_burst_granularity);
+	dec10 = (intgr << 10) | (burst_time << (64 - fdigs) >> 54);
+	se->burst_score = min((u32)39, dec10 * sched_burst_penalty_scale >> 20);
+}
+
+static u64 burst_scale(u64 delta, struct sched_entity *se) {
+	return mul_u64_u32_shr(delta, sched_prio_to_wmult[se->burst_score], 22);
+}
+
+static u64 calc_delta_fair_bscale(u64 delta, struct sched_entity *se) {
+	return burst_scale(calc_delta_fair(delta, se), se);
+}
+
+static inline u64 binary_smooth(u64 old, u64 new, unsigned int smoothness) {
+	return (new + old * ((1 << smoothness) - 1)) >> smoothness;
+}
+
+static inline void reset_burst(struct sched_entity *se) {
+	se->prev_burst_time = binary_smooth(
+		se->prev_burst_time, se->burst_time, sched_burst_smoothness);
+	se->burst_time = 0;
+}
+#endif // CONFIG_SCHED_BORE
+
 /*
  * Update the current task's runtime statistics.
  */
@@ -920,6 +1104,13 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	curr->sum_exec_runtime += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
+#ifdef CONFIG_SCHED_BORE
+	curr->burst_time += delta_exec;
+	update_burst_score(curr);
+	if (sched_bore & 1)
+		curr->vruntime += calc_delta_fair_bscale(delta_exec, curr);
+	else
+#endif // CONFIG_SCHED_BORE
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 	update_min_vruntime(cfs_rq);
 
@@ -1063,6 +1254,28 @@ update_stats_curr_start(struct cfs_rq *cfs_rq, struct sched_entity *se)
 /**************************************************
  * Scheduling class queueing methods:
  */
+
+static inline bool is_core_idle(int cpu)
+{
+#ifdef CONFIG_SCHED_SMT
+	int sibling;
+
+	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
+		if (cpu == sibling)
+			continue;
+
+		if (!idle_cpu(sibling))
+			return false;
+	}
+#endif
+
+	return true;
+}
+
+bool sched_smt_siblings_idle(int cpu)
+{
+	return is_core_idle(cpu);
+}
 
 #ifdef CONFIG_NUMA
 #define NUMA_IMBALANCE_MIN 2
@@ -1699,23 +1912,6 @@ struct numa_stats {
 	enum numa_type node_type;
 	int idle_cpu;
 };
-
-static inline bool is_core_idle(int cpu)
-{
-#ifdef CONFIG_SCHED_SMT
-	int sibling;
-
-	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
-		if (cpu == sibling)
-			continue;
-
-		if (!idle_cpu(sibling))
-			return false;
-	}
-#endif
-
-	return true;
-}
 
 struct task_numa_env {
 	struct task_struct *p;
@@ -4657,33 +4853,17 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 {
 	u64 vruntime = cfs_rq->min_vruntime;
 
-	/*
-	 * The 'current' period is already promised to the current tasks,
-	 * however the extra weight of the new task will slow them down a
-	 * little, place the new task so that it fits in the slot that
-	 * stays open at the end.
-	 */
-	if (initial && sched_feat(START_DEBIT))
-		vruntime += sched_vslice(cfs_rq, se);
-
-	/* sleeps up to a single latency don't count. */
-	if (!initial) {
-		unsigned long thresh;
-
-		if (se_is_idle(se))
-			thresh = sysctl_sched_min_granularity;
-		else
-			thresh = sysctl_sched_latency;
-
+	if (!initial)
+		/* sleeps up to a single latency don't count. */
+		vruntime -= get_sleep_latency(se_is_idle(se));
+	else if (sched_feat(START_DEBIT))
 		/*
-		 * Halve their sleep time's effect, to allow
-		 * for a gentler effect of sleepers:
+		 * The 'current' period is already promised to the current tasks,
+		 * however the extra weight of the new task will slow them down a
+		 * little, place the new task so that it fits in the slot that
+		 * stays open at the end.
 		 */
-		if (sched_feat(GENTLE_FAIR_SLEEPERS))
-			thresh >>= 1;
-
-		vruntime -= thresh;
-	}
+		vruntime += sched_vslice(cfs_rq, se);
 
 	/* ensure we never gain time by being placed backwards. */
 	se->vruntime = max_vruntime(se->vruntime, vruntime);
@@ -4767,8 +4947,10 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	check_schedstat_required();
 	update_stats_enqueue_fair(cfs_rq, se, flags);
 	check_spread(cfs_rq, se);
-	if (!curr)
+	if (!curr) {
 		__enqueue_entity(cfs_rq, se);
+		__enqueue_latency(cfs_rq, se, flags);
+	}
 	se->on_rq = 1;
 
 	if (cfs_rq->nr_running == 1) {
@@ -4854,8 +5036,10 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	clear_buddies(cfs_rq, se);
 
-	if (se != cfs_rq->curr)
+	if (se != cfs_rq->curr) {
 		__dequeue_entity(cfs_rq, se);
+		__dequeue_latency(cfs_rq, se);
+	}
 	se->on_rq = 0;
 	account_entity_dequeue(cfs_rq, se);
 
@@ -4886,6 +5070,8 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		update_idle_cfs_rq_clock_pelt(cfs_rq);
 }
 
+static long wakeup_latency_gran(struct sched_entity *curr, struct sched_entity *se);
+
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -4894,7 +5080,7 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
 	unsigned long ideal_runtime, delta_exec;
 	struct sched_entity *se;
-	s64 delta;
+	s64 delta, offset;
 
 	ideal_runtime = sched_slice(cfs_rq, curr);
 	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
@@ -4919,10 +5105,12 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	se = __pick_first_entity(cfs_rq);
 	delta = curr->vruntime - se->vruntime;
 
-	if (delta < 0)
+	offset = wakeup_latency_gran(curr, se);
+	if (delta < offset)
 		return;
 
-	if (delta > ideal_runtime)
+	if ((delta > ideal_runtime) ||
+	    (delta > get_latency_max()))
 		resched_curr(rq_of(cfs_rq));
 }
 
@@ -4940,6 +5128,7 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 		 */
 		update_stats_wait_end_fair(cfs_rq, se);
 		__dequeue_entity(cfs_rq, se);
+		__dequeue_latency(cfs_rq, se);
 		update_load_avg(cfs_rq, se, UPDATE_TG);
 	}
 
@@ -4964,6 +5153,11 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	se->prev_sum_exec_runtime = se->sum_exec_runtime;
 }
 
+#ifdef CONFIG_SCHED_BORE
+static int
+wakeup_preempt_entity_bscale(struct sched_entity *curr,
+                             struct sched_entity *se, bool do_scale);
+#endif // CONFIG_SCHED_BORE
 static int
 wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se);
 
@@ -4978,7 +5172,7 @@ static struct sched_entity *
 pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
 	struct sched_entity *left = __pick_first_entity(cfs_rq);
-	struct sched_entity *se;
+	struct sched_entity *latency, *se;
 
 	/*
 	 * If curr is set we have to see if its left of the leftmost entity
@@ -5008,7 +5202,13 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 			se = second;
 	}
 
-	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1) {
+#ifdef CONFIG_SCHED_BORE
+	if (cfs_rq->next && wakeup_preempt_entity_bscale(
+		                  cfs_rq->next, left, sched_bore & 2) < 1)
+#else // CONFIG_SCHED_BORE
+	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1)
+#endif // CONFIG_SCHED_BORE
+	{
 		/*
 		 * Someone really wants this to run. If it's not unfair, run it.
 		 */
@@ -5019,6 +5219,12 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 		 */
 		se = cfs_rq->last;
 	}
+
+	/* Check for latency sensitive entity waiting for running */
+	latency = __pick_first_latency(cfs_rq);
+	if (latency && (latency != se) &&
+	    wakeup_preempt_entity(latency, se) < 1)
+		se = latency;
 
 	return se;
 }
@@ -5043,6 +5249,7 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 		update_stats_wait_start_fair(cfs_rq, prev);
 		/* Put 'current' back into the tree. */
 		__enqueue_entity(cfs_rq, prev);
+		__enqueue_latency(cfs_rq, prev, 0);
 		/* in !on_rq case, update occurred at dequeue */
 		update_load_avg(cfs_rq, prev, 0);
 	}
@@ -6157,6 +6364,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	util_est_dequeue(&rq->cfs, p);
 
 	for_each_sched_entity(se) {
+#ifdef CONFIG_SCHED_BORE
+		if (task_sleep) reset_burst(se);
+#endif // CONFIG_SCHED_BORE
 		cfs_rq = cfs_rq_of(se);
 		dequeue_entity(cfs_rq, se, flags);
 
@@ -7486,6 +7696,23 @@ balance_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 }
 #endif /* CONFIG_SMP */
 
+static long wakeup_latency_gran(struct sched_entity *curr, struct sched_entity *se)
+{
+	long latency_offset = se->latency_offset;
+
+	/*
+	 * A negative latency offset means that the sched_entity has latency
+	 * requirement that needs to be evaluated versus other entity.
+	 * Otherwise, use the latency weight to evaluate how much scheduling
+	 * delay is acceptable by se.
+	 */
+	if ((latency_offset < 0) || (curr->latency_offset < 0))
+		latency_offset -= curr->latency_offset;
+	latency_offset = min_t(long, latency_offset, get_latency_max());
+
+	return latency_offset;
+}
+
 static unsigned long wakeup_gran(struct sched_entity *se)
 {
 	unsigned long gran = sysctl_sched_wakeup_granularity;
@@ -7521,19 +7748,45 @@ static unsigned long wakeup_gran(struct sched_entity *se)
  *
  */
 static int
+#ifdef CONFIG_SCHED_BORE
+wakeup_preempt_entity_bscale(struct sched_entity *curr,
+                             struct sched_entity *se, bool do_scale)
+#else // CONFIG_SCHED_BORE
 wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
+#endif // CONFIG_SCHED_BORE
 {
 	s64 gran, vdiff = curr->vruntime - se->vruntime;
+	s64 offset = wakeup_latency_gran(curr, se);
 
-	if (vdiff <= 0)
+	if (vdiff < offset)
 		return -1;
 
-	gran = wakeup_gran(se);
+	gran = offset + wakeup_gran(se);
+
+	/*
+	 * At wake up, the vruntime of a task is capped to not be older than
+	 * a sched_latency period compared to min_vruntime. This prevents long
+	 * sleeping task to get unlimited credit at wakeup. Such waking up task
+	 * has to preempt current in order to not lose its share of CPU
+	 * bandwidth but wakeup_gran() can become higher than scheduling period
+	 * for low priority task. Make sure that long sleeping task will get a
+	 * chance to preempt current.
+	 */
+	gran = min_t(s64, gran, get_latency_max());
+#ifdef CONFIG_SCHED_BORE
+	if (do_scale) gran = burst_scale(gran, se);
+#endif // CONFIG_SCHED_BORE
 	if (vdiff > gran)
 		return 1;
 
 	return 0;
 }
+#ifdef CONFIG_SCHED_BORE
+static int wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
+{
+	return wakeup_preempt_entity_bscale(curr, se, false);
+}
+#endif // CONFIG_SCHED_BORE
 
 static void set_last_buddy(struct sched_entity *se)
 {
@@ -7633,7 +7886,12 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 		return;
 
 	update_curr(cfs_rq_of(se));
-	if (wakeup_preempt_entity(se, pse) == 1) {
+#ifdef CONFIG_SCHED_BORE
+	if (wakeup_preempt_entity_bscale(se, pse, sched_bore & 2) == 1)
+#else // CONFIG_SCHED_BORE
+	if (wakeup_preempt_entity(se, pse) == 1)
+#endif // CONFIG_SCHED_BORE
+	{
 		/*
 		 * Bias pick_next to pick the sched entity that is
 		 * triggering this preemption.
@@ -7869,6 +8127,9 @@ static void yield_task_fair(struct rq *rq)
 	struct task_struct *curr = rq->curr;
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
 	struct sched_entity *se = &curr->se;
+#ifdef CONFIG_SCHED_BORE
+	reset_burst(se);
+#endif // CONFIG_SCHED_BORE
 
 	/*
 	 * Are we the only task in the tree?
@@ -8767,6 +9028,10 @@ struct sg_lb_stats {
 	unsigned int nr_numa_running;
 	unsigned int nr_preferred_running;
 #endif
+#ifdef CONFIG_IPC_CLASSES
+	long ipcc_score_after; /* Prospective IPCC score after load balancing */
+	long ipcc_score_before; /* IPCC score before load balancing */
+#endif
 };
 
 /*
@@ -9110,6 +9375,185 @@ group_type group_classify(unsigned int imbalance_pct,
 	return group_has_spare;
 }
 
+struct sg_lb_ipcc_stats {
+	int min_score;	/* Min(score(rq->curr->ipcc)) */
+	int min_ipcc;	/* Min(rq->curr->ipcc) */
+	long sum_score; /* Sum(score(rq->curr->ipcc)) */
+};
+
+#ifdef CONFIG_IPC_CLASSES
+static void init_rq_ipcc_stats(struct sg_lb_ipcc_stats *sgcs)
+{
+	*sgcs = (struct sg_lb_ipcc_stats) {
+		.min_score = INT_MAX,
+	};
+}
+
+/** Called only if cpu_of(@rq) is not idle and has tasks running. */
+static void update_sg_lb_ipcc_stats(struct sg_lb_ipcc_stats *sgcs,
+				    struct rq *rq)
+{
+	struct task_struct *curr;
+	unsigned short ipcc;
+	int score;
+
+	if (!sched_ipcc_enabled())
+		return;
+
+	curr = rcu_dereference(rq->curr);
+	if (!curr || (curr->flags & PF_EXITING) || is_idle_task(curr))
+		return;
+
+	ipcc = curr->ipcc;
+	score = arch_get_ipcc_score(ipcc, cpu_of(rq));
+
+	sgcs->sum_score += score;
+
+	if (score < sgcs->min_score) {
+		sgcs->min_score = score;
+		sgcs->min_ipcc = ipcc;
+	}
+}
+
+static void update_sg_lb_stats_scores(struct sg_lb_ipcc_stats *sgcs,
+				      struct sg_lb_stats *sgs,
+				      struct sched_group *sg,
+				      int dst_cpu)
+{
+	int busy_cpus, score_on_dst_cpu;
+	long before, after;
+
+	if (!sched_ipcc_enabled())
+		return;
+
+	busy_cpus = sgs->group_weight - sgs->idle_cpus;
+	/* No busy CPUs in the group. No tasks to move. */
+	if (!busy_cpus)
+		return;
+
+	score_on_dst_cpu = arch_get_ipcc_score(sgcs->min_ipcc, dst_cpu);
+
+	before = sgcs->sum_score;
+	after = before - sgcs->min_score;
+
+	/* SMT siblings share throughput. */
+	if (busy_cpus > 1 && sg->flags & SD_SHARE_CPUCAPACITY) {
+		before /= busy_cpus;
+		/* One sibling will become idle after load balance. */
+		after /= busy_cpus - 1;
+	}
+
+	sgs->ipcc_score_after = after + score_on_dst_cpu;
+	sgs->ipcc_score_before = before;
+}
+
+/**
+ * sched_asym_ipcc_prefer - Select a sched group based on its IPCC score
+ * @a:	Load balancing statistics of @sg_a
+ * @b:	Load balancing statistics of @sg_b
+ *
+ * Returns: true if preferring @a has a higher IPCC score than @b after
+ * balancing load. Returns false otherwise.
+ */
+static bool sched_asym_ipcc_prefer(struct sg_lb_stats *a,
+				   struct sg_lb_stats *b)
+{
+	if (!sched_ipcc_enabled())
+		return false;
+
+	/* @a increases overall throughput after load balance. */
+	if (a->ipcc_score_after > b->ipcc_score_after)
+		return true;
+
+	/*
+	 * If @a and @b yield the same overall throughput, pick @a if
+	 * its current throughput is lower than that of @b.
+	 */
+	if (a->ipcc_score_after == b->ipcc_score_after)
+		return a->ipcc_score_before < b->ipcc_score_before;
+
+	return false;
+}
+
+/**
+ * sched_asym_ipcc_pick - Select a sched group based on its IPCC score
+ * @a:		A scheduling group
+ * @b:		A second scheduling group
+ * @a_stats:	Load balancing statistics of @a
+ * @b_stats:	Load balancing statistics of @b
+ *
+ * Returns: true if @a has the same priority and @a has tasks with IPCC classes
+ * that yield higher overall throughput after load balance.
+ * Returns false otherwise.
+ */
+static bool sched_asym_ipcc_pick(struct sched_group *a,
+				 struct sched_group *b,
+				 struct sg_lb_stats *a_stats,
+				 struct sg_lb_stats *b_stats)
+{
+	/*
+	 * Only use the class-specific preference selection if both sched
+	 * groups have the same priority. We are not looking at a specific
+	 * CPU. We do not care about the idle state of the groups'
+	 * preferred CPU.
+	 */
+	if (arch_asym_cpu_priority(a->asym_prefer_cpu, false) !=
+	    arch_asym_cpu_priority(b->asym_prefer_cpu, false))
+		return false;
+
+	return sched_asym_ipcc_prefer(a_stats, b_stats);
+}
+
+/**
+ * ipcc_score_delta - Get the IPCC score delta on a different CPU
+ * @p:		A task
+ * @alt_cpu:	A prospective CPU to place @p
+ *
+ * Returns: The IPCC score delta that @p would get if placed on @alt_cpu
+ */
+static int ipcc_score_delta(struct task_struct *p, int alt_cpu)
+{
+	unsigned long ipcc = p->ipcc;
+
+	if (!sched_ipcc_enabled())
+		return INT_MIN;
+
+	return arch_get_ipcc_score(ipcc, alt_cpu) -
+	       arch_get_ipcc_score(ipcc, task_cpu(p));
+}
+
+#else /* CONFIG_IPC_CLASSES */
+static void update_sg_lb_ipcc_stats(struct sg_lb_ipcc_stats *sgcs,
+				    struct rq *rq)
+{
+}
+
+static void init_rq_ipcc_stats(struct sg_lb_ipcc_stats *class_sgs)
+{
+}
+
+static void update_sg_lb_stats_scores(struct sg_lb_ipcc_stats *sgcs,
+				      struct sg_lb_stats *sgs,
+				      struct sched_group *sg,
+				      int dst_cpu)
+{
+}
+
+static bool sched_asym_ipcc_pick(struct sched_group *a,
+				 struct sched_group *b,
+				 struct sg_lb_stats *a_stats,
+				 struct sg_lb_stats *b_stats)
+{
+	return false;
+}
+
+static int ipcc_score_delta(struct task_struct *p, int alt_cpu)
+{
+	return INT_MIN;
+}
+
+#endif /* CONFIG_IPC_CLASSES */
+
 /**
  * asym_smt_can_pull_tasks - Check whether the load balancing CPU can pull tasks
  * @dst_cpu:	Destination CPU of the load balancing
@@ -9139,12 +9583,10 @@ static bool asym_smt_can_pull_tasks(int dst_cpu, struct sd_lb_stats *sds,
 				    struct sched_group *sg)
 {
 #ifdef CONFIG_SCHED_SMT
-	bool local_is_smt, sg_is_smt;
+	bool local_is_smt;
 	int sg_busy_cpus;
 
 	local_is_smt = sds->local->flags & SD_SHARE_CPUCAPACITY;
-	sg_is_smt = sg->flags & SD_SHARE_CPUCAPACITY;
-
 	sg_busy_cpus = sgs->group_weight - sgs->idle_cpus;
 
 	if (!local_is_smt) {
@@ -9162,29 +9604,20 @@ static bool asym_smt_can_pull_tasks(int dst_cpu, struct sd_lb_stats *sds,
 		 * can help if it has higher priority and is idle (i.e.,
 		 * it has no running tasks).
 		 */
-		return sched_asym_prefer(dst_cpu, sg->asym_prefer_cpu);
-	}
-
-	/* @dst_cpu has SMT siblings. */
-
-	if (sg_is_smt) {
-		int local_busy_cpus = sds->local->group_weight -
-				      sds->local_stat.idle_cpus;
-		int busy_cpus_delta = sg_busy_cpus - local_busy_cpus;
-
-		if (busy_cpus_delta == 1)
-			return sched_asym_prefer(dst_cpu, sg->asym_prefer_cpu);
-
-		return false;
+		return sched_asym_prefer(dst_cpu, sg->asym_prefer_cpu, false);
 	}
 
 	/*
-	 * @sg does not have SMT siblings. Ensure that @sds::local does not end
-	 * up with more than one busy SMT sibling and only pull tasks if there
-	 * are not busy CPUs (i.e., no CPU has running tasks).
+	 * @dst_cpu has SMT siblings. Do asym_packing load balancing only if
+	 * all its siblings are idle (moving tasks between physical cores in
+	 * which some SMT siblings are busy results in the same throughput).
+	 *
+	 * If the difference in the number of busy CPUs is two or more, let
+	 * find_busiest_group() take care of it. We only care if @sg has
+	 * exactly one busy CPU. This covers SMT and non-SMT sched groups.
 	 */
-	if (!sds->local_stat.sum_nr_running)
-		return sched_asym_prefer(dst_cpu, sg->asym_prefer_cpu);
+	if (sg_busy_cpus == 1 && !sds->local_stat.sum_nr_running)
+		return sched_asym_prefer(dst_cpu, sg->asym_prefer_cpu, false);
 
 	return false;
 #else
@@ -9202,7 +9635,8 @@ sched_asym(struct lb_env *env, struct sd_lb_stats *sds,  struct sg_lb_stats *sgs
 	    (group->flags & SD_SHARE_CPUCAPACITY))
 		return asym_smt_can_pull_tasks(env->dst_cpu, sds, sgs, group);
 
-	return sched_asym_prefer(env->dst_cpu, group->asym_prefer_cpu);
+	/* Neither env::dst_cpu nor group::asym_prefer_cpu have SMT siblings. */
+	return sched_asym_prefer(env->dst_cpu, group->asym_prefer_cpu, false);
 }
 
 static inline bool
@@ -9232,9 +9666,11 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 				      struct sg_lb_stats *sgs,
 				      int *sg_status)
 {
+	struct sg_lb_ipcc_stats sgcs;
 	int i, nr_running, local_group;
 
 	memset(sgs, 0, sizeof(*sgs));
+	init_rq_ipcc_stats(&sgcs);
 
 	local_group = group == sds->local;
 
@@ -9284,6 +9720,8 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 			if (sgs->group_misfit_task_load < load)
 				sgs->group_misfit_task_load = load;
 		}
+
+		update_sg_lb_ipcc_stats(&sgcs, rq);
 	}
 
 	sgs->group_capacity = group->sgc->capacity;
@@ -9294,6 +9732,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	if (!local_group && env->sd->flags & SD_ASYM_PACKING &&
 	    env->idle != CPU_NOT_IDLE && sgs->sum_h_nr_running &&
 	    sched_asym(env, sds, sgs, group)) {
+		update_sg_lb_stats_scores(&sgcs, sgs, group, env->dst_cpu);
 		sgs->group_asym_packing = 1;
 	}
 
@@ -9368,8 +9807,20 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 
 	case group_asym_packing:
 		/* Prefer to move from lowest priority CPU's work */
-		if (sched_asym_prefer(sg->asym_prefer_cpu, sds->busiest->asym_prefer_cpu))
+		if (sched_asym_prefer(sg->asym_prefer_cpu,
+				      sds->busiest->asym_prefer_cpu,
+				      false))
 			return false;
+
+		/*
+		 * Unlike other callers of sched_asym_prefer(), here both @sg
+		 * and @sds::busiest have tasks running. When they have equal
+		 * priority, their IPC class scores can be used to select a
+		 * better busiest.
+		 */
+		if (sched_asym_ipcc_pick(sds->busiest, sg, &sds->busiest_stat, sgs))
+			return false;
+
 		break;
 
 	case group_misfit_task:
@@ -10262,8 +10713,8 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 {
 	struct rq *busiest = NULL, *rq;
 	unsigned long busiest_util = 0, busiest_load = 0, busiest_capacity = 1;
+	int i, busiest_ipcc_delta = INT_MIN;
 	unsigned int busiest_nr = 0;
-	int i;
 
 	for_each_cpu_and(i, sched_group_span(group), env->cpus) {
 		unsigned long capacity, load, util;
@@ -10314,7 +10765,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 
 		/* Make sure we only pull tasks from a CPU of lower priority */
 		if ((env->sd->flags & SD_ASYM_PACKING) &&
-		    sched_asym_prefer(i, env->dst_cpu) &&
+		    sched_asym_prefer(i, env->dst_cpu, true) &&
 		    nr_running == 1)
 			continue;
 
@@ -10369,8 +10820,37 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 
 		case migrate_task:
 			if (busiest_nr < nr_running) {
+				struct task_struct *curr;
+
 				busiest_nr = nr_running;
 				busiest = rq;
+
+				/*
+				 * Remember the IPC score delta of busiest::curr.
+				 * We may need it to break a tie with other queues
+				 * with equal nr_running.
+				 */
+				curr = rcu_dereference(busiest->curr);
+				busiest_ipcc_delta = ipcc_score_delta(curr,
+								      env->dst_cpu);
+			/*
+			 * If rq and busiest have the same number of running
+			 * tasks, pick rq if doing so would give rq::curr a
+			 * bigger IPC boost on dst_cpu.
+			 */
+			} else if (sched_ipcc_enabled() &&
+				   busiest_nr == nr_running) {
+				struct task_struct *curr;
+				int delta;
+
+				curr = rcu_dereference(rq->curr);
+				delta = ipcc_score_delta(curr, env->dst_cpu);
+
+				if (busiest_ipcc_delta < delta) {
+					busiest_ipcc_delta = delta;
+					busiest_nr = nr_running;
+					busiest = rq;
+				}
 			}
 			break;
 
@@ -10407,7 +10887,7 @@ asym_active_balance(struct lb_env *env)
 	 * highest priority CPUs.
 	 */
 	return env->idle != CPU_NOT_IDLE && (env->sd->flags & SD_ASYM_PACKING) &&
-	       sched_asym_prefer(env->dst_cpu, env->src_cpu);
+	       sched_asym_prefer(env->dst_cpu, env->src_cpu, true);
 }
 
 static inline bool
@@ -11143,7 +11623,7 @@ static void nohz_balancer_kick(struct rq *rq)
 		 * around.
 		 */
 		for_each_cpu_and(i, sched_domain_span(sd), nohz.idle_cpus_mask) {
-			if (sched_asym_prefer(i, cpu)) {
+			if (sched_asym_prefer(i, cpu, true)) {
 				flags = NOHZ_STATS_KICK | NOHZ_BALANCE_KICK;
 				goto unlock;
 			}
@@ -11803,6 +12283,9 @@ bool cfs_prio_less(struct task_struct *a, struct task_struct *b, bool in_fi)
 	delta = (s64)(sea->vruntime - seb->vruntime) +
 		(s64)(cfs_rqb->min_vruntime_fi - cfs_rqa->min_vruntime_fi);
 
+	/* Take into account latency prio */
+	delta -= wakeup_latency_gran(sea, seb);
+
 	return delta > 0;
 }
 #else
@@ -12073,6 +12556,7 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 void init_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->tasks_timeline = RB_ROOT_CACHED;
+	cfs_rq->latency_timeline = RB_ROOT_CACHED;
 	u64_u32_store(cfs_rq->min_vruntime, (u64)(-(1LL << 20)));
 #ifdef CONFIG_SMP
 	raw_spin_lock_init(&cfs_rq->removed.lock);
@@ -12128,6 +12612,7 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 		goto err;
 
 	tg->shares = NICE_0_LOAD;
+	tg->latency_offset = 0;
 
 	init_cfs_bandwidth(tg_cfs_bandwidth(tg));
 
@@ -12226,6 +12711,9 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	}
 
 	se->my_q = cfs_rq;
+
+	se->latency_offset = tg->latency_offset;
+
 	/* guarantee group entities always have weight */
 	update_load_set(&se->load, NICE_0_LOAD);
 	se->parent = parent;
@@ -12351,6 +12839,42 @@ next_cpu:
 		__sched_group_set_shares(tg, scale_load(WEIGHT_IDLEPRIO));
 	else
 		__sched_group_set_shares(tg, NICE_0_LOAD);
+
+	mutex_unlock(&shares_mutex);
+	return 0;
+}
+
+int sched_group_set_latency(struct task_group *tg, s64 latency)
+{
+	int i;
+
+	if (tg == &root_task_group)
+		return -EINVAL;
+
+	if (abs(latency) > sysctl_sched_latency)
+		return -EINVAL;
+
+	mutex_lock(&shares_mutex);
+
+	if (tg->latency_offset == latency) {
+		mutex_unlock(&shares_mutex);
+		return 0;
+	}
+
+	tg->latency_offset = latency;
+
+	for_each_possible_cpu(i) {
+		struct sched_entity *se = tg->se[i];
+		struct rq *rq = cpu_rq(i);
+		struct rq_flags rf;
+
+		rq_lock_irqsave(rq, &rf);
+
+		__dequeue_latency(se->cfs_rq, se);
+		WRITE_ONCE(se->latency_offset, latency);
+
+		rq_unlock_irqrestore(rq, &rf);
+	}
 
 	mutex_unlock(&shares_mutex);
 	return 0;

@@ -432,7 +432,7 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 	else
 		preempt_enable();
 	if (!(torture_random(trsp) & 0xfff))
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 }
 
 // SCF test kthread.  Repeatedly does calls to members of the
@@ -466,7 +466,7 @@ static int scftorture_invoker(void *arg)
 				VERBOSE_SCFTORTOUT("scftorture_invoker %d ended before starting", scfp->cpu);
 				goto end;
 			}
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 
 	VERBOSE_SCFTORTOUT("scftorture_invoker %d started", scfp->cpu);

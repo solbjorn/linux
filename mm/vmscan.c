@@ -1163,7 +1163,7 @@ void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason)
 	 */
 	switch(reason) {
 	case VMSCAN_THROTTLE_WRITEBACK:
-		timeout = HZ/10;
+		timeout = 100;
 
 		if (atomic_inc_return(&pgdat->nr_writeback_throttled) == 1) {
 			WRITE_ONCE(pgdat->nr_reclaim_start,
@@ -1180,27 +1180,27 @@ void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason)
 		}
 
 		timeout = 1;
-
 		break;
 	case VMSCAN_THROTTLE_ISOLATED:
-		timeout = HZ/50;
+		timeout = 20;
 		break;
 	default:
 		WARN_ON_ONCE(1);
-		timeout = HZ;
+		timeout = MSEC_PER_SEC;
 		break;
 	}
 
+	timeout *= USEC_PER_MSEC;
+
 	prepare_to_wait(wqh, &wait, TASK_UNINTERRUPTIBLE);
-	ret = schedule_timeout(timeout);
+	ret = schedule_usec_hrtimeout(timeout);
 	finish_wait(wqh, &wait);
 
 	if (reason == VMSCAN_THROTTLE_WRITEBACK)
 		atomic_dec(&pgdat->nr_writeback_throttled);
 
-	trace_mm_vmscan_throttled(pgdat->node_id, jiffies_to_usecs(timeout),
-				jiffies_to_usecs(timeout - ret),
-				reason);
+	trace_mm_vmscan_throttled(pgdat->node_id, timeout, timeout - ret,
+				  reason);
 }
 
 /*

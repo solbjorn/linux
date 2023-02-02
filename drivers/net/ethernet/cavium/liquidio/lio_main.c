@@ -209,7 +209,7 @@ static int lio_wait_for_oq_pkts(struct octeon_device *oct)
 			tasklet_schedule(&oct_priv->droq_tasklet);
 		}
 		pkt_cnt = 0;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 	} while (retry-- && pending_pkts);
 

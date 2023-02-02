@@ -3393,7 +3393,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 	 * though before starting on this new sync request.
 	 */
 	if (conf->nr_waiting)
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 	/* Again, very different code for resync and recovery.
 	 * Both must result in an r10bio with a list of bios that

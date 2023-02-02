@@ -377,7 +377,7 @@ static int raw_release(struct socket *sock)
 	spin_lock(&raw_notifier_lock);
 	while (raw_busy_notifier == ro) {
 		spin_unlock(&raw_notifier_lock);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		spin_lock(&raw_notifier_lock);
 	}
 	list_del(&ro->notifier);

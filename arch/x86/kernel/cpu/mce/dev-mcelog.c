@@ -317,7 +317,7 @@ static ssize_t mce_chrdev_write(struct file *filp, const char __user *ubuf,
 	 * Need to give user space some time to set everything up,
 	 * so do it a jiffie or two later everywhere.
 	 */
-	schedule_timeout(2);
+	schedule_msec_hrtimeout(2);
 
 	blocking_notifier_call_chain(&mce_injector_chain, 0, &m);
 

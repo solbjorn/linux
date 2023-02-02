@@ -978,7 +978,7 @@ static void cp_reset_hw (struct cp_private *cp)
 		if (!(cpr8(Cmd) & CmdReset))
 			return;
 
-		schedule_timeout_uninterruptible(10);
+		schedule_msec_hrtimeout_uninterruptible(10);
 	}
 
 	netdev_err(cp->dev, "hardware reset timeout\n");

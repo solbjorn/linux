@@ -390,7 +390,7 @@ static int i2c_davinci_wait_bus_not_busy(struct davinci_i2c_dev *dev)
 	do {
 		if (!(davinci_i2c_read_reg(dev, DAVINCI_I2C_STR_REG) & DAVINCI_I2C_STR_BB))
 			return 0;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while (time_before_eq(jiffies, timeout));
 
 	dev_warn(dev->dev, "timeout waiting for bus ready\n");

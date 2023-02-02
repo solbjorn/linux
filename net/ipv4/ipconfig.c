@@ -1258,7 +1258,7 @@ static int __init ic_dynamic(void)
 		if (!d->next) {
 			jiff = jiffies + timeout;
 			while (time_before(jiffies, jiff) && !ic_got_reply)
-				schedule_timeout_uninterruptible(1);
+				schedule_min_hrtimeout_uninterruptible();
 		}
 #ifdef IPCONFIG_DHCP
 		/* DHCP isn't done until we get a DHCPACK. */

@@ -979,7 +979,7 @@ static int wait_clear_urbs(struct snd_usb_endpoint *ep)
 		if (!alive)
 			break;
 
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	} while (time_before(jiffies, end_time));
 
 	if (alive)
@@ -1883,4 +1883,3 @@ static void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 		ep->freqshift = INT_MIN;
 	}
 }
-

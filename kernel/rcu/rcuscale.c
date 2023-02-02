@@ -361,7 +361,7 @@ static void rcu_scale_wait_shutdown(void)
 	if (atomic_read(&n_rcu_scale_writer_finished) < nrealwriters)
 		return;
 	while (!torture_must_stop())
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 }
 
 /*
@@ -432,7 +432,7 @@ rcu_scale_writer(void *arg)
 	 * The system_state test is approximate, but works well in practice.
 	 */
 	while (!gp_exp && system_state != SYSTEM_RUNNING)
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 
 	t = ktime_get_mono_fast_ns();
 	if (atomic_inc_return(&n_rcu_scale_writer_started) >= nrealwriters) {
@@ -482,7 +482,7 @@ retry:
 				 scale_type, SCALE_FLAG, me, MIN_MEAS);
 			if (atomic_inc_return(&n_rcu_scale_writer_finished) >=
 			    nrealwriters) {
-				schedule_timeout_interruptible(10);
+				schedule_msec_hrtimeout_interruptible(10);
 				rcu_ftrace_dump(DUMP_ALL);
 				SCALEOUT_STRING("Test complete");
 				t_rcu_scale_writer_finished = t;
@@ -589,7 +589,7 @@ rcu_scale_cleanup(void)
 					scale_type, SCALE_FLAG,
 					i, j, *wdp);
 				if (j % 100 == 0)
-					schedule_timeout_uninterruptible(1);
+					schedule_msec_hrtimeout_uninterruptible(1);
 			}
 			kfree(writer_durations[i]);
 		}
@@ -842,7 +842,7 @@ kfree_scale_init(void)
 						  shutdown_task);
 		if (torture_init_error(firsterr))
 			goto unwind;
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 	}
 
 	pr_alert("kfree object size=%zu, kfree_by_call_rcu=%d\n",
@@ -864,7 +864,7 @@ kfree_scale_init(void)
 	}
 
 	while (atomic_read(&n_kfree_scale_thread_started) < kfree_nrealthreads)
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 
 	torture_init_end();
 	return 0;
@@ -924,7 +924,7 @@ rcu_scale_init(void)
 						  shutdown_task);
 		if (torture_init_error(firsterr))
 			goto unwind;
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 	}
 	reader_tasks = kcalloc(nrealreaders, sizeof(reader_tasks[0]),
 			       GFP_KERNEL);
@@ -940,7 +940,7 @@ rcu_scale_init(void)
 			goto unwind;
 	}
 	while (atomic_read(&n_rcu_scale_reader_started) < nrealreaders)
-		schedule_timeout_uninterruptible(1);
+		schedule_msec_hrtimeout_uninterruptible(1);
 	writer_tasks = kcalloc(nrealwriters, sizeof(reader_tasks[0]),
 			       GFP_KERNEL);
 	writer_durations = kcalloc(nrealwriters, sizeof(*writer_durations),

@@ -220,16 +220,14 @@ static void do_catch_up(struct spk_synth *synth)
 	struct var_t *flush_time;
 	int jiffy_delta_val;
 	int delay_time_val;
-	int timeout_val;
 
 	jiffy_delta = spk_get_var(JIFFY);
 	delay_time = spk_get_var(DELAY);
 	flush_time = spk_get_var(FLUSH);
 	spin_lock_irqsave(&speakup_info.spinlock, flags);
 	jiffy_delta_val = jiffy_delta->u.n.value;
-	timeout_val = flush_time->u.n.value;
 	spin_unlock_irqrestore(&speakup_info.spinlock, flags);
-	timeout = msecs_to_jiffies(timeout_val);
+	timeout = flush_time->u.n.value;
 	jiff_max = jiffies + jiffy_delta_val;
 
 	while (!kthread_should_stop()) {
@@ -238,7 +236,7 @@ static void do_catch_up(struct spk_synth *synth)
 		while (is_flushing && timeout) {
 			prepare_to_wait(&flush, &wait, TASK_INTERRUPTIBLE);
 			spin_unlock_irqrestore(&flush_lock, flags);
-			timeout = schedule_timeout(timeout);
+			timeout = schedule_msec_hrtimeout(timeout);
 			spin_lock_irqsave(&flush_lock, flags);
 		}
 		finish_wait(&flush, &wait);
@@ -265,7 +263,7 @@ static void do_catch_up(struct spk_synth *synth)
 		if (ch == '\n')
 			ch = 0x0D;
 		if (synth_full_val || !synth->io_ops->synth_out(synth, ch)) {
-			schedule_timeout(msecs_to_jiffies(delay_time_val));
+			schedule_msec_hrtimeout(delay_time_val);
 			continue;
 		}
 		set_current_state(TASK_RUNNING);
@@ -289,8 +287,7 @@ static void do_catch_up(struct spk_synth *synth)
 				delay_time_val = delay_time->u.n.value;
 				spin_unlock_irqrestore(&speakup_info.spinlock,
 						       flags);
-				schedule_timeout(msecs_to_jiffies
-						 (delay_time_val));
+				schedule_msec_hrtimeout(delay_time_val);
 				jiff_max = jiffies + jiffy_delta_val;
 			}
 		}
@@ -343,4 +340,3 @@ MODULE_AUTHOR("David Borowski");
 MODULE_DESCRIPTION("Speakup support for DECtalk Express synthesizers");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
-

@@ -1361,7 +1361,7 @@ void dev_deactivate_many(struct list_head *head)
 			 * require expensive checks in the fast paths of packet
 			 * processing which isn't worth it.
 			 */
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 		}
 	}
 }

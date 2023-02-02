@@ -95,6 +95,9 @@ EXPORT_SYMBOL_GPL(sysctl_long_vals);
 #if defined(CONFIG_SYSCTL)
 
 /* Constants used for minimum and maximum */
+#ifdef CONFIG_HIGH_RES_TIMERS
+static int ten_thousand = 10000;
+#endif
 
 #ifdef CONFIG_PERF_EVENTS
 static const int six_hundred_forty_kb = 640 * 1024;
@@ -1671,6 +1674,17 @@ int proc_do_static_key(struct ctl_table *table, int write,
 }
 
 static struct ctl_table kern_table[] = {
+#ifdef CONFIG_HIGH_RES_TIMERS
+	{
+		.procname	= "hrtimeout_min_us",
+		.data		= &hrtimeout_min_us,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= &ten_thousand,
+	},
+#endif
 	{
 		.procname	= "panic",
 		.data		= &panic_timeout,

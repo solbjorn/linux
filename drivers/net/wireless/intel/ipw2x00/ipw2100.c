@@ -804,7 +804,7 @@ static int ipw2100_hw_send_command(struct ipw2100_priv *priv,
 	 * doesn't seem to have as many firmware restart cycles...
 	 *
 	 * As a test, we're sticking in a 1/100s delay here */
-	schedule_timeout_uninterruptible(msecs_to_jiffies(10));
+	schedule_msec_hrtimeout_uninterruptible((10));
 
 	return 0;
 
@@ -1255,7 +1255,7 @@ static int ipw2100_start_adapter(struct ipw2100_priv *priv)
 	IPW_DEBUG_FW("Waiting for f/w initialization to complete...\n");
 	i = 5000;
 	do {
-		schedule_timeout_uninterruptible(msecs_to_jiffies(40));
+		schedule_msec_hrtimeout_uninterruptible((40));
 		/* Todo... wait for sync command ... */
 
 		read_register(priv->net_dev, IPW_REG_INTA, &inta);
@@ -1384,7 +1384,7 @@ static int ipw2100_power_cycle_adapter(struct ipw2100_priv *priv)
 static int ipw2100_hw_phy_off(struct ipw2100_priv *priv)
 {
 
-#define HW_PHY_OFF_LOOP_DELAY (msecs_to_jiffies(50))
+#define HW_PHY_OFF_LOOP_DELAY 50
 
 	struct host_command cmd = {
 		.host_command = CARD_DISABLE_PHY_OFF,
@@ -1409,7 +1409,7 @@ static int ipw2100_hw_phy_off(struct ipw2100_priv *priv)
 		    (val2 & IPW2100_COMMAND_PHY_OFF))
 			return 0;
 
-		schedule_timeout_uninterruptible(HW_PHY_OFF_LOOP_DELAY);
+		schedule_msec_hrtimeout_uninterruptible(HW_PHY_OFF_LOOP_DELAY);
 	}
 
 	return -EIO;
@@ -7186,7 +7186,7 @@ static int ipw2100_wx_set_txpow(struct net_device *dev,
 {
 	struct ipw2100_priv *priv = libipw_priv(dev);
 	int err = 0, value;
-	
+
 	if (ipw_radio_kill_sw(priv, wrqu->txpower.disabled))
 		return -EINPROGRESS;
 

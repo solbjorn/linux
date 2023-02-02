@@ -340,7 +340,7 @@ static ssize_t lirc_transmit(struct file *file, const char __user *buf,
 				ktime_get());
 	if (towait > 0) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(usecs_to_jiffies(towait));
+		schedule_usec_hrtimeout(towait);
 	}
 
 	return n;

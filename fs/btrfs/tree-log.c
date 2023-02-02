@@ -2871,7 +2871,7 @@ static inline void btrfs_remove_log_ctx(struct btrfs_root *root,
 	mutex_unlock(&root->log_mutex);
 }
 
-/* 
+/*
  * Invoked in log mutex context, or be sure there is no other task which
  * can access the list.
  */
@@ -2942,7 +2942,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 		if (!btrfs_test_opt(fs_info, SSD) &&
 		    test_bit(BTRFS_ROOT_MULTI_LOG_TASKS, &root->state)) {
 			mutex_unlock(&root->log_mutex);
-			schedule_timeout_uninterruptible(1);
+			schedule_min_hrtimeout_uninterruptible();
 			mutex_lock(&root->log_mutex);
 		}
 		wait_for_writer(root);
@@ -7542,4 +7542,3 @@ out:
 	if (log_pinned)
 		btrfs_end_log_trans(root);
 }
-

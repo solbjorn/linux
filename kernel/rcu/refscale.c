@@ -56,7 +56,7 @@ do {											\
 	if (verbose &&									\
 	    (verbose_batched <= 0 ||							\
 	     !(atomic_inc_return(&verbose_batch_ctr) % verbose_batched))) {		\
-		schedule_timeout_uninterruptible(1);					\
+		schedule_min_hrtimeout_uninterruptible();				\
 		pr_alert("%s" SCALE_FLAG s "\n", scale_type, ## x);			\
 	}										\
 } while (0)
@@ -682,7 +682,7 @@ static int main_func(void *arg)
 	// Wait for all threads to start.
 	atomic_inc(&n_init);
 	while (atomic_read(&n_init) < nreaders + 1)
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 	// Start exp readers up per experiment
 	for (exp = 0; exp < nruns && !torture_must_stop(); exp++) {
@@ -744,7 +744,7 @@ oom_exit:
 
 	// Wait for torture to stop us
 	while (!torture_must_stop())
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 
 end:
 	torture_kthread_stopping("main_func");
@@ -844,7 +844,7 @@ ref_scale_init(void)
 						  shutdown_task);
 		if (torture_init_error(firsterr))
 			goto unwind;
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 	}
 
 	// Reader tasks (default to ~75% of online CPUs).

@@ -190,8 +190,12 @@ int clockevents_tick_resume(struct clock_event_device *dev)
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_MIN_ADJUST
 
+#ifdef CONFIG_HIGH_RES_TIMERS
+#define MIN_DELTA_LIMIT		NSEC_PER_USEC
+#else
 /* Limit min_delta to a jiffie */
 #define MIN_DELTA_LIMIT		(NSEC_PER_SEC / HZ)
+#endif
 
 /**
  * clockevents_increase_min_delta - raise minimum delta of a clock event device

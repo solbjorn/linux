@@ -29,6 +29,7 @@
 #include <linux/kernel.h>
 #include <linux/math.h>
 #include <linux/mutex.h>
+#include <linux/percpu.h>
 #include <linux/percpu-defs.h>
 #include <linux/printk.h>
 #include <linux/processor.h>
@@ -39,6 +40,7 @@
 #include <linux/workqueue.h>
 
 #include <asm/msr.h>
+#include <asm/intel-family.h>
 
 #include "../thermal_core.h"
 #include "intel_hfi.h"
@@ -47,6 +49,8 @@
 /* Hardware Feedback Interface MSR configuration bits */
 #define HW_FEEDBACK_PTR_VALID_BIT		BIT(0)
 #define HW_FEEDBACK_CONFIG_HFI_ENABLE_BIT	BIT(0)
+#define HW_FEEDBACK_CONFIG_ITD_ENABLE_BIT	BIT(1)
+#define HW_FEEDBACK_THREAD_CONFIG_ENABLE_BIT	BIT(0)
 
 /* CPUID detection and enumeration definitions for HFI */
 
@@ -71,13 +75,33 @@ union cpuid6_edx {
 	u32 full;
 };
 
+union cpuid6_ecx {
+	struct {
+		u32	dont_care0:8;
+		u32	nr_classes:8;
+		u32	dont_care1:16;
+	} split;
+	u32 full;
+};
+
+#ifdef CONFIG_IPC_CLASSES
+union hfi_thread_feedback_char_msr {
+	struct {
+		u64	classid : 8;
+		u64	__reserved : 55;
+		u64	valid : 1;
+	} split;
+	u64 full;
+};
+#endif
+
 /**
  * struct hfi_cpu_data - HFI capabilities per CPU
  * @perf_cap:		Performance capability
  * @ee_cap:		Energy efficiency capability
  *
  * Capabilities of a logical processor in the HFI table. These capabilities are
- * unitless.
+ * unitless and specific to each HFI class.
  */
 struct hfi_cpu_data {
 	u8	perf_cap;
@@ -89,7 +113,8 @@ struct hfi_cpu_data {
  * @perf_updated:	Hardware updated performance capabilities
  * @ee_updated:		Hardware updated energy efficiency capabilities
  *
- * Properties of the data in an HFI table.
+ * Properties of the data in an HFI table. There exists one header per each
+ * HFI class.
  */
 struct hfi_hdr {
 	u8	perf_updated;
@@ -127,16 +152,21 @@ struct hfi_instance {
 
 /**
  * struct hfi_features - Supported HFI features
+ * @nr_classes:		Number of classes supported
  * @nr_table_pages:	Size of the HFI table in 4KB pages
  * @cpu_stride:		Stride size to locate the capability data of a logical
  *			processor within the table (i.e., row stride)
+ * @class_stride:	Stride size to locate a class within the capability
+ *			data of a logical processor or the HFI table header
  * @hdr_size:		Size of the table header
  *
  * Parameters and supported features that are common to all HFI instances
  */
 struct hfi_features {
 	size_t		nr_table_pages;
+	unsigned int	nr_classes;
 	unsigned int	cpu_stride;
+	unsigned int	class_stride;
 	unsigned int	hdr_size;
 };
 
@@ -164,6 +194,158 @@ static struct workqueue_struct *hfi_updates_wq;
 #define HFI_UPDATE_INTERVAL		HZ
 #define HFI_MAX_THERM_NOTIFY_COUNT	16
 
+#ifdef CONFIG_IPC_CLASSES
+static int __percpu *hfi_ipcc_scores;
+
+/*
+ * A task may be unclassified if it has been recently created, spend most of
+ * its lifetime sleeping, or hardware has not provided a classification.
+ *
+ * Most tasks will be classified as scheduler's IPC class 1 (HFI class 0)
+ * eventually. Meanwhile, the scheduler will place tasks of higher IPC score
+ * on higher-performance CPUs.
+ *
+ * IPC class 1 is a reasonable choice. It matches the performance capability
+ * of the legacy, classless, HFI table.
+ */
+#define HFI_UNCLASSIFIED_DEFAULT 1
+
+int intel_hfi_has_ipc_classes(void)
+{
+	return cpu_feature_enabled(X86_FEATURE_ITD);
+}
+
+#define CLASS_DEBOUNCER_SKIPS 4
+
+/**
+ * debounce_and_update_class() - Process and update a task's classification
+ *
+ * @p:		The task of which the classification will be updated
+ * @new_ipcc:	The new IPC classification
+ *
+ * Update the classification of @p with the new value that hardware provides.
+ * Only update the classification of @p if it has been the same during
+ * CLASS_DEBOUNCER_SKIPS consecutive ticks.
+ */
+static void debounce_and_update_class(struct task_struct *p, u8 new_ipcc)
+{
+	u16 debounce_skip;
+
+	/* The class of @p changed, only restart the debounce counter. */
+	if (p->ipcc_tmp != new_ipcc) {
+		p->ipcc_cntr = 1;
+		goto out;
+	}
+
+	/*
+	 * The class of @p did not change. Update it if it has been the same
+	 * for CLASS_DEBOUNCER_SKIPS user ticks.
+	 */
+	debounce_skip = p->ipcc_cntr + 1;
+	if (debounce_skip < CLASS_DEBOUNCER_SKIPS)
+		p->ipcc_cntr++;
+	else
+		p->ipcc = new_ipcc;
+
+out:
+	p->ipcc_tmp = new_ipcc;
+}
+
+static bool classification_is_accurate(u8 hfi_class, bool smt_siblings_idle)
+{
+	switch (boot_cpu_data.x86_model) {
+	case INTEL_FAM6_ALDERLAKE:
+	case INTEL_FAM6_ALDERLAKE_L:
+	case INTEL_FAM6_RAPTORLAKE:
+	case INTEL_FAM6_RAPTORLAKE_P:
+	case INTEL_FAM6_RAPTORLAKE_S:
+		if (hfi_class == 3 || hfi_class == 2 || smt_siblings_idle)
+			return true;
+
+		return false;
+
+	default:
+		return true;
+	}
+}
+
+void intel_hfi_update_ipcc(struct task_struct *curr)
+{
+	union hfi_thread_feedback_char_msr msr;
+	bool idle;
+
+	/* We should not be here if ITD is not supported. */
+	if (!cpu_feature_enabled(X86_FEATURE_ITD)) {
+		pr_warn_once("task classification requested but not supported!");
+		return;
+	}
+
+	rdmsrl(MSR_IA32_HW_FEEDBACK_CHAR, msr.full);
+	if (!msr.split.valid)
+		return;
+
+	/*
+	 * 0 is a valid classification for Intel Thread Director. A scheduler
+	 * IPCC class of 0 means that the task is unclassified. Adjust.
+	 */
+	idle = sched_smt_siblings_idle(task_cpu(curr));
+	if (classification_is_accurate(msr.split.classid, idle))
+		debounce_and_update_class(curr, msr.split.classid + 1);
+}
+
+int intel_hfi_get_ipcc_score(unsigned short ipcc, int cpu)
+{
+	unsigned short hfi_class;
+	int *scores;
+
+	if (cpu < 0 || cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	if (ipcc == IPC_CLASS_UNCLASSIFIED)
+		ipcc = HFI_UNCLASSIFIED_DEFAULT;
+
+	/*
+	 * Scheduler IPC classes start at 1. HFI classes start at 0.
+	 * See note intel_hfi_update_ipcc().
+	 */
+	hfi_class = ipcc - 1;
+
+	if (hfi_class >= hfi_features.nr_classes)
+		return -EINVAL;
+
+	scores = per_cpu_ptr(hfi_ipcc_scores, cpu);
+	if (!scores)
+		return -ENODEV;
+
+	return READ_ONCE(scores[hfi_class]);
+}
+
+static int alloc_hfi_ipcc_scores(void)
+{
+	hfi_ipcc_scores = __alloc_percpu(sizeof(*hfi_ipcc_scores) *
+					 hfi_features.nr_classes,
+					 sizeof(*hfi_ipcc_scores));
+
+	return !hfi_ipcc_scores;
+}
+
+static void set_hfi_ipcc_score(void *caps, int cpu)
+{
+	int i, *hfi_class = per_cpu_ptr(hfi_ipcc_scores, cpu);
+
+	for (i = 0;  i < hfi_features.nr_classes; i++) {
+		struct hfi_cpu_data *class_caps;
+
+		class_caps = caps + i * hfi_features.class_stride;
+		WRITE_ONCE(hfi_class[i], class_caps->perf_cap);
+	}
+}
+
+#else
+static int alloc_hfi_ipcc_scores(void) { return 0; }
+static void set_hfi_ipcc_score(void *caps, int cpu) { }
+#endif /* CONFIG_IPC_CLASSES */
+
 static void get_hfi_caps(struct hfi_instance *hfi_instance,
 			 struct thermal_genl_cpu_caps *cpu_caps)
 {
@@ -186,6 +368,8 @@ static void get_hfi_caps(struct hfi_instance *hfi_instance,
 		cpu_caps[i].efficiency = caps->ee_cap << 2;
 
 		++i;
+
+		set_hfi_ipcc_score(caps, cpu);
 	}
 	raw_spin_unlock_irq(&hfi_instance->table_lock);
 }
@@ -333,8 +517,8 @@ static void init_hfi_cpu_index(struct hfi_cpu_info *info)
 }
 
 /*
- * The format of the HFI table depends on the number of capabilities that the
- * hardware supports. Keep a data structure to navigate the table.
+ * The format of the HFI table depends on the number of capabilities and classes
+ * that the hardware supports. Keep a data structure to navigate the table.
  */
 static void init_hfi_instance(struct hfi_instance *hfi_instance)
 {
@@ -387,6 +571,11 @@ void intel_hfi_online(unsigned int cpu)
 	}
 
 	init_hfi_cpu_index(info);
+
+	if (cpu_feature_enabled(X86_FEATURE_ITD)) {
+		msr_val = HW_FEEDBACK_THREAD_CONFIG_ENABLE_BIT;
+		wrmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, msr_val);
+	}
 
 	/*
 	 * Now check if the HFI instance of the package/die of @cpu has been
@@ -443,6 +632,10 @@ void intel_hfi_online(unsigned int cpu)
 	 */
 	rdmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 	msr_val |= HW_FEEDBACK_CONFIG_HFI_ENABLE_BIT;
+
+	if (cpu_feature_enabled(X86_FEATURE_ITD))
+		msr_val |= HW_FEEDBACK_CONFIG_ITD_ENABLE_BIT;
+
 	wrmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 
 unlock:
@@ -516,17 +709,35 @@ static __init int hfi_parse_features(void)
 	hfi_features.nr_table_pages = edx.split.table_pages + 1;
 
 	/*
+	 * Capability fields of an HFI class are grouped together. Classes are
+	 * contiguous in memory.  Hence, use the number of supported features to
+	 * locate a specific class.
+	 */
+	hfi_features.class_stride = nr_capabilities;
+
+	if (cpu_feature_enabled(X86_FEATURE_ITD)) {
+		union cpuid6_ecx ecx;
+
+		ecx.full = cpuid_ecx(CPUID_HFI_LEAF);
+		hfi_features.nr_classes = ecx.split.nr_classes;
+	} else {
+		hfi_features.nr_classes = 1;
+	}
+
+	/*
 	 * The header contains change indications for each supported feature.
 	 * The size of the table header is rounded up to be a multiple of 8
 	 * bytes.
 	 */
-	hfi_features.hdr_size = DIV_ROUND_UP(nr_capabilities, 8) * 8;
+	hfi_features.hdr_size = DIV_ROUND_UP(nr_capabilities *
+					     hfi_features.nr_classes, 8) * 8;
 
 	/*
 	 * Data of each logical processor is also rounded up to be a multiple
 	 * of 8 bytes.
 	 */
-	hfi_features.cpu_stride = DIV_ROUND_UP(nr_capabilities, 8) * 8;
+	hfi_features.cpu_stride = DIV_ROUND_UP(nr_capabilities *
+					       hfi_features.nr_classes, 8) * 8;
 
 	return 0;
 }
@@ -562,7 +773,13 @@ void __init intel_hfi_init(void)
 	if (!hfi_updates_wq)
 		goto err_nomem;
 
+	if (alloc_hfi_ipcc_scores())
+		goto err_ipcc;
+
 	return;
+
+err_ipcc:
+	destroy_workqueue(hfi_updates_wq);
 
 err_nomem:
 	for (j = 0; j < i; ++j) {

@@ -151,7 +151,7 @@ static void snd_rawmidi_buffer_ref_sync(struct snd_rawmidi_substream *substream)
 			rmidi_err(substream->rmidi, "Buffer ref sync timeout\n");
 			return;
 		}
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		spin_lock_irq(&substream->lock);
 	}
 	spin_unlock_irq(&substream->lock);

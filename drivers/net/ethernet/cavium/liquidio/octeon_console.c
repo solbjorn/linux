@@ -411,7 +411,7 @@ int octeon_wait_for_bootloader(struct octeon_device *oct,
 	       != OCTEON_PCI_IO_BUF_OWNER_HOST) {
 		if (--wait_time_hundredths <= 0)
 			return -1;
-		schedule_timeout_uninterruptible(HZ / 100);
+		schedule_msec_hrtimeout_uninterruptible(10);
 	}
 	return 0;
 }

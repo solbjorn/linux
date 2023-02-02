@@ -669,6 +669,9 @@ DEFINE_PER_CPU(struct sched_domain __rcu *, sd_numa);
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_asym_packing);
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_asym_cpucapacity);
 DEFINE_STATIC_KEY_FALSE(sched_asym_cpucapacity);
+#ifdef CONFIG_IPC_CLASSES
+DEFINE_STATIC_KEY_FALSE(sched_ipcc);
+#endif
 
 static void update_top_cache_domain(int cpu)
 {
@@ -1282,7 +1285,11 @@ static void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 		for_each_cpu(cpu, sched_group_span(sg)) {
 			if (max_cpu < 0)
 				max_cpu = cpu;
-			else if (sched_asym_prefer(cpu, max_cpu))
+			/*
+			 * We want the CPU priorities unaffected by the idle
+			 * state of its SMT siblings, if any.
+			 */
+			else if (sched_asym_prefer(cpu, max_cpu, false))
 				max_cpu = cpu;
 		}
 		sg->asym_prefer_cpu = max_cpu;
@@ -2473,6 +2480,11 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 	if (has_asym)
 		static_branch_inc_cpuslocked(&sched_asym_cpucapacity);
+
+#ifdef CONFIG_IPC_CLASSES
+	if (arch_has_ipc_classes())
+		static_branch_enable_cpuslocked(&sched_ipcc);
+#endif
 
 	if (rq && sched_debug_verbose) {
 		pr_info("root domain span: %*pbl (max cpu_capacity = %lu)\n",

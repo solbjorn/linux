@@ -2495,7 +2495,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	while (p->flags >= SWP_SCANNING) {
 		spin_unlock(&p->lock);
 		spin_unlock(&swap_lock);
-		schedule_timeout_uninterruptible(1);
+		schedule_min_hrtimeout_uninterruptible();
 		spin_lock(&swap_lock);
 		spin_lock(&p->lock);
 	}

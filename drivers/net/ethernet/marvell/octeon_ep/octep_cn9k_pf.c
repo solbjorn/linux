@@ -601,7 +601,7 @@ static void octep_enable_iq_cn93_pf(struct octep_device *oct, int iq_no)
 
 	while (octep_read_csr64(oct, CN93_SDP_R_IN_INSTR_DBELL(iq_no)) &&
 	       loop--) {
-		schedule_timeout_interruptible(1);
+		schedule_min_hrtimeout_interruptible();
 	}
 
 	reg_val = octep_read_csr64(oct,  CN93_SDP_R_IN_INT_LEVELS(iq_no));

@@ -424,10 +424,10 @@ void cpu_set_state_online(int cpu)
  */
 bool cpu_wait_death(unsigned int cpu, int seconds)
 {
-	int jf_left = seconds * HZ;
-	int oldstate;
+	long ms_left = seconds * MSEC_PER_SEC;
+	long sleep_ms = 1;
 	bool ret = true;
-	int sleep_jf = 1;
+	int oldstate;
 
 	might_sleep();
 
@@ -438,11 +438,11 @@ bool cpu_wait_death(unsigned int cpu, int seconds)
 
 	/* But if the outgoing CPU dawdles, wait increasingly long times. */
 	while (atomic_read(&per_cpu(cpu_hotplug_state, cpu)) != CPU_DEAD) {
-		schedule_timeout_uninterruptible(sleep_jf);
-		jf_left -= sleep_jf;
-		if (jf_left <= 0)
+		schedule_msec_hrtimeout_uninterruptible(sleep_ms);
+		ms_left -= sleep_ms;
+		if (ms_left <= 0)
 			break;
-		sleep_jf = DIV_ROUND_UP(sleep_jf * 11, 10);
+		sleep_ms = DIV_ROUND_UP(sleep_ms * 11, 10);
 	}
 update_state_early:
 	oldstate = atomic_read(&per_cpu(cpu_hotplug_state, cpu));
