@@ -192,6 +192,7 @@ struct netns_ipv4 {
 
 	int sysctl_udp_wmem_min;
 	int sysctl_udp_rmem_min;
+	u32 sysctl_tcp_collapse_max_bytes;
 
 	u8 sysctl_fib_notify_on_flag_change;
 
