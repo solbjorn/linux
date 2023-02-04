@@ -2502,7 +2502,7 @@ long __sched __io_schedule_msec_hrtimeout(long timeout)
 
 	return ret;
 }
-EXPORT_SYMBOL(io_schedule_msec_hrtimeout);
+EXPORT_SYMBOL(__io_schedule_msec_hrtimeout);
 
 long __sched io_schedule_min_hrtimeout(void)
 {
@@ -2515,4 +2515,4 @@ long __sched io_schedule_min_hrtimeout(void)
 
 	return ret;
 }
-EXPORT_SYMBOL(io_schedule_msec_hrtimeout);
+EXPORT_SYMBOL(io_schedule_min_hrtimeout);
