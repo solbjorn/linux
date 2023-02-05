@@ -9,6 +9,10 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
+#ifdef __KERNEL__
+#include <linux/cfi_types.h>
+#include <linux/linkage.h>
+#endif
 #include "../common/portability_macros.h"
 
 /* Stack marking
@@ -31,6 +35,7 @@
  * TODO: Support Windows calling convention.
  */
 
+#ifndef __KERNEL__
 ZSTD_HIDE_ASM_FUNCTION(HUF_decompress4X1_usingDTable_internal_fast_asm_loop)
 ZSTD_HIDE_ASM_FUNCTION(HUF_decompress4X2_usingDTable_internal_fast_asm_loop)
 ZSTD_HIDE_ASM_FUNCTION(_HUF_decompress4X2_usingDTable_internal_fast_asm_loop)
@@ -39,6 +44,7 @@ ZSTD_HIDE_ASM_FUNCTION(_HUF_decompress4X1_usingDTable_internal_fast_asm_loop)
 .global HUF_decompress4X2_usingDTable_internal_fast_asm_loop
 .global _HUF_decompress4X1_usingDTable_internal_fast_asm_loop
 .global _HUF_decompress4X2_usingDTable_internal_fast_asm_loop
+#endif
 .text
 
 /* Sets up register mappings for clarity.
@@ -96,9 +102,13 @@ ZSTD_HIDE_ASM_FUNCTION(_HUF_decompress4X1_usingDTable_internal_fast_asm_loop)
 /* Define both _HUF_* & HUF_* symbols because MacOS
  * C symbols are prefixed with '_' & Linux symbols aren't.
  */
+#ifdef __KERNEL__
+SYM_TYPED_FUNC_START(HUF_decompress4X1_usingDTable_internal_fast_asm_loop)
+#else
 _HUF_decompress4X1_usingDTable_internal_fast_asm_loop:
 HUF_decompress4X1_usingDTable_internal_fast_asm_loop:
     ZSTD_CET_ENDBRANCH
+#endif
     /* Save all registers - even if they are callee saved for simplicity. */
     push %rax
     push %rbx
@@ -350,11 +360,20 @@ HUF_decompress4X1_usingDTable_internal_fast_asm_loop:
     pop %rcx
     pop %rbx
     pop %rax
+#ifdef __KERNEL__
+    RET
+SYM_FUNC_END(HUF_decompress4X1_usingDTable_internal_fast_asm_loop)
+#else
     ret
+#endif
 
+#ifdef __KERNEL__
+SYM_TYPED_FUNC_START(HUF_decompress4X2_usingDTable_internal_fast_asm_loop)
+#else
 _HUF_decompress4X2_usingDTable_internal_fast_asm_loop:
 HUF_decompress4X2_usingDTable_internal_fast_asm_loop:
     ZSTD_CET_ENDBRANCH
+#endif
     /* Save all registers - even if they are callee saved for simplicity. */
     push %rax
     push %rbx
@@ -572,6 +591,11 @@ HUF_decompress4X2_usingDTable_internal_fast_asm_loop:
     pop %rcx
     pop %rbx
     pop %rax
+#ifdef __KERNEL__
+    RET
+SYM_FUNC_END(HUF_decompress4X2_usingDTable_internal_fast_asm_loop)
+#else
     ret
+#endif
 
 #endif
